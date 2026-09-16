@@ -66,9 +66,9 @@ class CanonicalFinding:
 
     # Strength of the observable evidence that motivated this finding.
     # It is NOT a probability of identity.
-    confidence: float
+    evidence_strength: float
 
-    relevance_reason: str
+    match_reason: str
 
     raw_evidence: dict[str, Any]
 

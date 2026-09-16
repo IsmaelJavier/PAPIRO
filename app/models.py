@@ -95,6 +95,11 @@ class Job(Base):
         back_populates="job",
         cascade="all, delete-orphan",
     )
+    correlations = relationship(
+        "Correlation",
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
 
 
 class ModuleRun(Base):
@@ -145,6 +150,147 @@ class ModuleRun(Base):
     job = relationship(
         "Job",
         back_populates="runs",
+    )
+
+
+class CorrelationAssessment(str, enum.Enum):
+    undetermined = "indeterminado"
+    confirmed = "confirmada"
+    discarded = "descartada"
+
+
+class Correlation(Base):
+    """Deterministic association between findings based on shared indicators.
+
+    A correlation is an observed linkage between pieces of evidence. It is
+    not an automatic identity conclusion.
+    """
+
+    __tablename__ = "correlations"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id",
+            "finding_a_id",
+            "finding_b_id",
+            name="uq_correlation_job_findings",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    job_id: Mapped[str] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    finding_a_id: Mapped[str] = mapped_column(
+        ForeignKey("findings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    finding_b_id: Mapped[str] = mapped_column(
+        ForeignKey("findings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    correlation_type: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+    basis: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    assessment: Mapped[CorrelationAssessment] = mapped_column(
+        Enum(
+            CorrelationAssessment,
+            native_enum=False,
+            length=32,
+            values_callable=lambda enum_class: [
+                member.value for member in enum_class
+            ],
+        ),
+        nullable=False,
+        default=CorrelationAssessment.undetermined,
+    )
+    assessment_note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    assessment_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    job = relationship("Job", back_populates="correlations")
+    finding_a = relationship(
+        "Finding",
+        foreign_keys=[finding_a_id],
+        back_populates="correlations_as_a",
+    )
+    finding_b = relationship(
+        "Finding",
+        foreign_keys=[finding_b_id],
+        back_populates="correlations_as_b",
+    )
+    evidence = relationship(
+        "CorrelationEvidence",
+        back_populates="correlation",
+        cascade="all, delete-orphan",
+    )
+
+
+class CorrelationEvidence(Base):
+    __tablename__ = "correlation_evidence"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "correlation_id",
+            "indicator_a_id",
+            "indicator_b_id",
+            name="uq_correlation_indicator_pair",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    correlation_id: Mapped[str] = mapped_column(
+        ForeignKey("correlations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    indicator_a_id: Mapped[str] = mapped_column(
+        ForeignKey("indicators.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    indicator_b_id: Mapped[str] = mapped_column(
+        ForeignKey("indicators.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    correlation = relationship(
+        "Correlation",
+        back_populates="evidence",
+    )
+    indicator_a = relationship(
+        "Indicator",
+        foreign_keys=[indicator_a_id],
+    )
+    indicator_b = relationship(
+        "Indicator",
+        foreign_keys=[indicator_b_id],
     )
 
 
@@ -206,12 +352,12 @@ class Finding(Base):
     # This value does NOT represent probability that the profile belongs
     # to the target person. It measures the strength of the observable
     # evidence that motivated the finding.
-    confidence: Mapped[float] = mapped_column(
+    evidence_strength: Mapped[float] = mapped_column(
         Float,
         nullable=False,
     )
 
-    relevance_reason: Mapped[str] = mapped_column(
+    match_reason: Mapped[str] = mapped_column(
         Text,
         nullable=False,
     )
@@ -239,6 +385,9 @@ class Finding(Base):
             IdentityAssessment,
             native_enum=False,
             length=32,
+            values_callable=lambda enum_class: [
+                member.value for member in enum_class
+            ],
         ),
         nullable=False,
         default=IdentityAssessment.undetermined,
@@ -249,6 +398,9 @@ class Finding(Base):
             RelevanceAssessment,
             native_enum=False,
             length=32,
+            values_callable=lambda enum_class: [
+                member.value for member in enum_class
+            ],
         ),
         nullable=False,
         default=RelevanceAssessment.undetermined,
@@ -278,6 +430,18 @@ class Finding(Base):
     indicators = relationship(
         "Indicator",
         back_populates="finding",
+        cascade="all, delete-orphan",
+    )
+    correlations_as_a = relationship(
+        "Correlation",
+        foreign_keys="Correlation.finding_a_id",
+        back_populates="finding_a",
+        cascade="all, delete-orphan",
+    )
+    correlations_as_b = relationship(
+        "Correlation",
+        foreign_keys="Correlation.finding_b_id",
+        back_populates="finding_b",
         cascade="all, delete-orphan",
     )
 

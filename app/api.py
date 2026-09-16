@@ -2,9 +2,11 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import func, select
 
 from app.db import db_session
-from app.models import Finding
+from app.models import Correlation, Finding
 from app.repository import Repository
 from app.schemas import (
+    CorrelationAssessmentRequest,
+    CorrelationResponse,
     FindingAssessmentRequest,
     FindingResponse,
     IngestNameRequest,
@@ -15,6 +17,32 @@ from app.tasks import process_person_name_job
 
 
 router = APIRouter(prefix="/api/v1")
+
+
+def correlation_to_response(
+    row: Correlation,
+) -> CorrelationResponse:
+    return CorrelationResponse(
+        id=row.id,
+        job_id=row.job_id,
+        finding_a_id=row.finding_a_id,
+        finding_b_id=row.finding_b_id,
+        correlation_type=row.correlation_type,
+        basis=row.basis,
+        assessment=row.assessment,
+        assessment_note=row.assessment_note,
+        assessment_updated_at=row.assessment_updated_at,
+        created_at=row.created_at,
+        evidence=[
+            {
+                "indicator_a_id": item.indicator_a_id,
+                "indicator_b_id": item.indicator_b_id,
+                "indicator_type": item.indicator_a.indicator_type,
+                "normalized_value": item.indicator_a.normalized_value,
+            }
+            for item in row.evidence
+        ],
+    )
 
 
 def finding_to_response(
@@ -29,8 +57,8 @@ def finding_to_response(
         input_type=row.input_type,
         finding_type=row.finding_type,
         value=row.value,
-        confidence=row.confidence,
-        relevance_reason=row.relevance_reason,
+        evidence_strength=row.evidence_strength,
+        match_reason=row.match_reason,
 
         identity_assessment=row.identity_assessment,
         relevance_assessment=row.relevance_assessment,
@@ -128,6 +156,11 @@ def get_job(
             started_at=job.started_at,
             completed_at=job.completed_at,
             finding_count=finding_count,
+            correlation_count=session.scalar(
+                select(func.count(Correlation.id)).where(
+                    Correlation.job_id == job_id
+                )
+            ) or 0,
 
             module_runs=[
                 {
@@ -169,6 +202,57 @@ def get_findings(
             finding_to_response(row)
             for row in rows
         ]
+
+
+@router.get(
+    "/jobs/{job_id}/correlations",
+    response_model=list[CorrelationResponse],
+)
+def get_correlations(
+    job_id: str,
+):
+    with db_session() as session:
+        repo = Repository(session)
+
+        if not repo.get_job(job_id):
+            raise HTTPException(
+                status_code=404,
+                detail="job not found",
+            )
+
+        rows = repo.get_correlations(job_id)
+        return [correlation_to_response(row) for row in rows]
+
+
+@router.patch(
+    "/correlations/{correlation_id}/assessment",
+    response_model=CorrelationResponse,
+)
+def assess_correlation(
+    correlation_id: str,
+    payload: CorrelationAssessmentRequest,
+):
+    with db_session() as session:
+        repo = Repository(session)
+        correlation = session.get(Correlation, correlation_id)
+
+        if not correlation:
+            raise HTTPException(
+                status_code=404,
+                detail="correlation not found",
+            )
+
+        updated = repo.assess_correlation(
+            correlation,
+            assessment=payload.assessment,
+            assessment_note=payload.assessment_note,
+            update_note="assessment_note" in payload.model_fields_set,
+        )
+
+        # Reload relationships for response serialization.
+        rows = repo.get_correlations(correlation.job_id)
+        updated = next(row for row in rows if row.id == correlation_id)
+        return correlation_to_response(updated)
 
 
 @router.patch(

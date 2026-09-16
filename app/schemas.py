@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.models import (
     IdentityAssessment,
     RelevanceAssessment,
+    CorrelationAssessment,
 )
 
 
@@ -47,6 +48,43 @@ class FindingAssessmentRequest(BaseModel):
         return self
 
 
+class CorrelationAssessmentRequest(BaseModel):
+    assessment: CorrelationAssessment | None = None
+    assessment_note: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+    @model_validator(mode="after")
+    def validate_at_least_one_field(self):
+        if not self.model_fields_set:
+            raise ValueError(
+                "at least one correlation assessment field must be provided"
+            )
+        return self
+
+
+class CorrelationEvidenceResponse(BaseModel):
+    indicator_a_id: str
+    indicator_b_id: str
+    indicator_type: str
+    normalized_value: str
+
+
+class CorrelationResponse(BaseModel):
+    id: str
+    job_id: str
+    finding_a_id: str
+    finding_b_id: str
+    correlation_type: str
+    basis: str
+    assessment: CorrelationAssessment
+    assessment_note: str | None
+    assessment_updated_at: datetime | None
+    created_at: datetime
+    evidence: list[CorrelationEvidenceResponse]
+
+
 class FindingResponse(BaseModel):
     id: str
 
@@ -60,8 +98,8 @@ class FindingResponse(BaseModel):
     finding_type: str
     value: str
 
-    confidence: float
-    relevance_reason: str
+    evidence_strength: float
+    match_reason: str
 
     identity_assessment: IdentityAssessment
     relevance_assessment: RelevanceAssessment
@@ -107,5 +145,6 @@ class JobResponse(BaseModel):
     completed_at: datetime | None
 
     finding_count: int
+    correlation_count: int
 
     module_runs: list[ModuleRunResponse]
