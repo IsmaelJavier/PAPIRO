@@ -173,3 +173,56 @@ cat migrations/003_entities_graph.sql | docker compose exec -T postgres psql -U 
 ```
 
 No se debe eliminar el volumen de PostgreSQL.
+
+## Visualización del grafo en GitHub Codespaces
+
+La API expone una interfaz web en:
+
+`/ui/graph/{job_id}`
+
+En Codespaces, abre el panel **Ports**, localiza el puerto `8000` y pulsa el icono de abrir en navegador (globe). Después añade `/ui/graph/<JOB_ID>` a la dirección, por ejemplo:
+
+`https://<codespace>-8000.app.github.dev/ui/graph/ac1d9bb2-86c1-4259-a370-1b8d4d1fc673`
+
+La interfaz consulta automáticamente `/api/v1/jobs/{job_id}/graph` y permite filtrar por tipo de nodo y fuente, buscar etiquetas y seleccionar nodos/aristas para inspeccionar la evidencia.
+
+## Espacio de investigación (UI)
+
+La ruta `/ui/job/<JOB_ID>` (y la ruta anterior `/ui/graph/<JOB_ID>`) sirve ahora como espacio de trabajo del investigador. El objetivo de esta iteración es permitir la reconstrucción asistida sin utilizar la consola:
+
+1. Revisar los findings recolectados y sus evaluaciones.
+2. Seleccionar uno o varios findings como evidencia.
+3. Crear una entidad/perfil candidato y asociarle esa evidencia en una sola operación.
+4. Abrir el perfil para consultar findings, indicadores y relaciones.
+5. Seleccionar dos entidades y crear una relación desde la interfaz.
+6. Confirmar, descartar o mantener indeterminada una relación.
+7. Confirmar, descartar o mantener indeterminadas las correlaciones y los findings.
+8. Navegar entre el grafo y el detalle de cada elemento, conservando la trazabilidad hacia la fuente.
+
+La UI no convierte una correlación en una identidad ni una entidad en una persona confirmada. Las agrupaciones y relaciones son objetos de investigación que requieren evaluación del investigador.
+
+### Migración de esta iteración
+
+Antes de utilizar entidades y relaciones en una base existente, ejecutar una vez:
+
+```bash
+cat migrations/003_entities_graph.sql | docker compose exec -T postgres psql -U kami -d kami_eye
+```
+
+Luego reiniciar API y worker si es necesario:
+
+```bash
+docker compose restart api worker
+```
+
+En GitHub Codespaces, abrir el puerto `8000` desde **Ports → Open in Browser** y añadir:
+
+```text
+/ui/job/<JOB_ID>
+```
+
+Por ejemplo:
+
+```text
+https://<codespace>-8000.app.github.dev/ui/job/ac1d9bb2-86c1-4259-a370-1b8d4d1fc673
+```
