@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 
 from app.api import router
 from app.db import Base, engine
@@ -13,6 +14,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="OSINT MVP", version="0.1.0", lifespan=lifespan)
 app.include_router(router)
+
+
+@app.get("/ui/job/{job_id}", include_in_schema=False)
+@app.get("/ui/graph/{job_id}", include_in_schema=False)
+def investigator_ui(job_id: str):
+    """Serve the investigator workspace for an OSINT job."""
+    return FileResponse("/app/app/static/graph.html")
 
 
 @app.get("/health")

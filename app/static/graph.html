@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kami-no-Eye · Espacio de investigación</title>
+  <script src="https://unpkg.com/cytoscape@3.31.2/dist/cytoscape.min.js"></script>
+  <style>
+    :root { --bg:#f5f7fb; --panel:#fff; --ink:#172033; --muted:#657089; --line:#dce2ec; --primary:#2457d6; --primary-soft:#eaf0ff; --success:#16845b; --warning:#a96b00; --danger:#b42318; --dark:#101827; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--ink); }
+    button,input,select,textarea { font:inherit; }
+    button { cursor:pointer; }
+    .app { min-height:100vh; display:grid; grid-template-rows:64px 1fr; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:0 20px; background:var(--dark); color:#fff; }
+    header h1 { margin:0; font-size:18px; letter-spacing:.1px; }
+    header .sub { font-size:12px; color:#aeb9cc; margin-top:3px; }
+    .header-actions { display:flex; gap:8px; align-items:center; }
+    .header-actions a,.header-actions button { color:#e8edf7; background:#1b2638; border:1px solid #35445b; border-radius:7px; padding:8px 11px; text-decoration:none; }
+    .layout { display:grid; grid-template-columns:310px minmax(420px,1fr) 370px; min-height:0; }
+    .panel { background:var(--panel); min-height:0; }
+    .left { border-right:1px solid var(--line); overflow:auto; }
+    .right { border-left:1px solid var(--line); overflow:auto; }
+    .section { padding:14px 15px; border-bottom:1px solid var(--line); }
+    .section h2 { margin:0 0 10px; font-size:14px; }
+    .section h3 { margin:0 0 7px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+    .summary { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+    .stat { border:1px solid var(--line); border-radius:9px; padding:9px; background:#fafbfe; }
+    .stat strong { display:block; font-size:19px; }
+    .stat span { font-size:11px; color:var(--muted); }
+    .toolbar { display:flex; flex-wrap:wrap; gap:7px; }
+    .btn { border:1px solid #cbd4e2; border-radius:7px; background:#fff; color:var(--ink); padding:8px 10px; }
+    .btn:hover { background:#f6f8fc; }
+    .btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+    .btn.success { background:var(--success); border-color:var(--success); color:#fff; }
+    .btn.danger { color:var(--danger); }
+    .btn:disabled { opacity:.45; cursor:not-allowed; }
+    .btn.small { padding:6px 8px; font-size:12px; }
+    .field { margin-bottom:10px; }
+    .field label { display:block; font-size:11px; color:var(--muted); margin-bottom:5px; font-weight:600; }
+    input,select,textarea { width:100%; border:1px solid #cbd4e2; border-radius:7px; padding:8px 9px; background:#fff; color:var(--ink); }
+    textarea { min-height:80px; resize:vertical; }
+    .list { display:flex; flex-direction:column; gap:7px; max-height:42vh; overflow:auto; }
+    .finding { display:flex; gap:8px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:8px; background:#fff; }
+    .finding.selected { border-color:#8aa5f0; background:var(--primary-soft); }
+    .finding input { width:auto; margin-top:3px; }
+    .finding-main { min-width:0; flex:1; }
+    .finding-title { font-size:12px; font-weight:650; word-break:break-word; }
+    .finding-meta { font-size:10px; color:var(--muted); margin-top:3px; }
+    .badge { display:inline-flex; align-items:center; border:1px solid #d7deea; border-radius:999px; padding:2px 6px; font-size:10px; background:#f8faff; margin-right:4px; }
+    .badge.ok { color:var(--success); border-color:#a9d9c6; background:#effaf5; }
+    .badge.warn { color:var(--warning); border-color:#ecd4a7; background:#fff9ed; }
+    .badge.no { color:var(--danger); border-color:#efb9b5; background:#fff3f2; }
+    .entity-card { border:1px solid var(--line); border-radius:9px; padding:9px; background:#fff; }
+    .entity-card.selected { border-color:#7d9bea; box-shadow:0 0 0 2px #e7edff; }
+    .entity-name { font-weight:700; font-size:13px; }
+    .entity-meta { font-size:10px; color:var(--muted); margin:3px 0 7px; }
+    .entity-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .search-status { font-size:11px; color:var(--muted); min-height:16px; margin-top:6px; }
+    .graph-options { display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:11px; color:var(--muted); }
+    .graph-options label { display:flex; align-items:center; gap:4px; }
+    .graph-options input { width:auto; }
+    .graph-wrap { position:relative; min-width:0; min-height:0; background:#fbfcfe; }
+    #cy { position:absolute; inset:0; }
+    .graph-tools { position:absolute; top:12px; left:12px; z-index:3; display:flex; gap:7px; flex-wrap:wrap; }
+    .graph-tools .btn { box-shadow:0 1px 4px #1a2a4614; }
+    .legend { position:absolute; bottom:12px; left:12px; z-index:3; max-width:360px; background:#ffffffed; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:10px; color:var(--muted); box-shadow:0 1px 4px #1a2a4614; }
+    .detail-title { font-size:16px; font-weight:750; margin-bottom:3px; word-break:break-word; }
+    .detail-sub { color:var(--muted); font-size:11px; margin-bottom:12px; }
+    .kv { border-bottom:1px solid #eef1f6; padding:8px 0; font-size:12px; word-break:break-word; }
+    .kv b { display:block; color:var(--muted); font-size:10px; margin-bottom:2px; }
+    .detail-actions { display:flex; gap:7px; flex-wrap:wrap; margin:10px 0; }
+    .empty { color:var(--muted); font-size:12px; padding:10px 0; }
+    .notice { padding:9px; border-radius:8px; font-size:11px; background:#f6f8fc; border:1px solid var(--line); color:var(--muted); }
+    .notice.warn { background:#fff9ed; border-color:#ecd4a7; color:#7a4e00; }
+    .modal-backdrop { position:fixed; inset:0; z-index:20; background:#0b1220a8; display:none; align-items:center; justify-content:center; padding:20px; }
+    .modal { width:min(560px,100%); max-height:90vh; overflow:auto; background:#fff; border-radius:12px; box-shadow:0 18px 50px #0004; }
+    .modal header { height:auto; background:#fff; color:var(--ink); border-bottom:1px solid var(--line); padding:14px 16px; }
+    .modal header h2 { font-size:15px; margin:0; }
+    .modal-body { padding:16px; }
+    .modal-footer { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--line); }
+    .selected-list { max-height:150px; overflow:auto; border:1px solid var(--line); border-radius:7px; padding:7px; margin-top:7px; }
+    .selected-item { font-size:11px; padding:4px 2px; }
+    .error { color:var(--danger); }
+    .loading { color:var(--muted); font-size:12px; }
+    @media (max-width:1150px) { .layout { grid-template-columns:280px 1fr; grid-template-rows:minmax(500px,1fr) auto; } .right { grid-column:1 / -1; border-left:0; border-top:1px solid var(--line); max-height:42vh; } }
+    @media (max-width:760px) { .layout { display:flex; flex-direction:column; } .left,.right { max-height:none; border:0; border-bottom:1px solid var(--line); } .graph-wrap { min-height:62vh; } header { padding:0 12px; } header .jobtext { display:none; } }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Kami-no-Eye · Espacio de investigación</h1>
+      <div class="sub jobtext" id="jobLabel">Cargando investigación…</div>
+    </div>
+    <div class="header-actions">
+      <a id="docsLink" href="/docs" target="_blank" rel="noopener">API</a>
+      <button id="reloadBtn">Actualizar</button>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="panel left">
+      <section class="section">
+        <h2>Resumen de la investigación</h2>
+        <div class="summary">
+          <div class="stat"><strong id="nFindings">0</strong><span>Findings</span></div>
+          <div class="stat"><strong id="nIndicators">0</strong><span>Indicadores</span></div>
+          <div class="stat"><strong id="nCorrelations">0</strong><span>Correlaciones</span></div>
+          <div class="stat"><strong id="nEntities">0</strong><span>Entidades</span></div>
+        </div>
+      </section>
+      <section class="section">
+        <h2>1 · Nueva búsqueda</h2>
+        <div class="field"><label>Buscar una persona en las fuentes configuradas</label><input id="manualSearch" placeholder="Ej.: Linus Torvalds"></div>
+        <div class="toolbar"><button class="btn primary small" id="manualSearchBtn">Buscar y añadir resultados</button></div>
+        <div id="searchStatus" class="search-status"></div>
+      </section>
+      <section class="section">
+        <h2>2 · Evidencia recolectada</h2>
+        <div class="field"><label>Filtrar por fuente</label><select id="sourceFilter"><option value="all">Todas las fuentes</option></select></div>
+        <div class="field"><label>Buscar</label><input id="findingSearch" placeholder="nombre, URL, usuario…"></div>
+        <div class="toolbar">
+          <button class="btn small" id="selectVisible">Seleccionar visibles</button>
+          <button class="btn small" id="clearSelection">Limpiar selección</button>
+        </div>
+        <div id="selectionHelp" class="notice" style="margin-top:9px">Selecciona dos o más findings para construir un perfil candidato.</div>
+        <div id="findingList" class="list" style="margin-top:9px"></div>
+      </section>
+      <section class="section">
+        <h2>3 · Perfiles candidatos</h2>
+        <div class="toolbar" style="margin-bottom:9px"><button class="btn primary" id="createEntityBtn" disabled>Crear entidad con selección</button></div>
+        <div id="entityList" class="list"></div>
+      </section>
+    </aside>
+
+    <main class="graph-wrap">
+      <div class="graph-tools">
+        <button class="btn small" id="fitBtn">Ajustar</button>
+        <button class="btn small" id="resetGraphBtn">Restablecer vista</button>
+        <button class="btn small" id="hideSelectedBtn">Ocultar seleccionados</button>
+        <button class="btn small" id="showHiddenBtn">Mostrar ocultos</button>
+        <select class="btn small" id="nodeTypeFilter" style="width:auto"><option value="all">Todos los nodos</option><option value="finding">Findings</option><option value="indicator">Indicadores</option><option value="entity">Entidades</option></select>
+        <div class="graph-options">
+          <label><input type="checkbox" id="showIndicators" checked> indicadores</label>
+          <label><input type="checkbox" id="showCorrelations" checked> correlaciones</label>
+          <label><input type="checkbox" id="showMemberships" checked> evidencia de entidades</label>
+        </div>
+      </div>
+      <div id="cy"></div>
+      <div class="legend">El grafo muestra evidencia, agrupaciones y relaciones de la investigación. Una entidad es un candidato de reconstrucción; no equivale automáticamente a una identidad confirmada.</div>
+    </main>
+
+    <aside class="panel right">
+      <section class="section">
+        <h2>Investigación guiada</h2>
+        <div id="workflowHelp" class="notice">Flujo recomendado: revisar evidencia → seleccionar findings → crear entidad candidata → revisar perfil → relacionar entidades → validar relaciones.</div>
+      </section>
+      <section class="section">
+        <div id="details"><div class="empty">Selecciona un finding, indicador, entidad, correlación o relación para ver su detalle.</div></div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="entityModal">
+  <div class="modal">
+    <header><h2>Crear entidad / perfil candidato</h2><button class="btn small" onclick="closeModal('entityModal')">Cerrar</button></header>
+    <div class="modal-body">
+      <div class="field"><label>Nombre de trabajo del candidato</label><input id="entityLabel" placeholder="Ej.: Candidato A"></div>
+      <div class="field"><label>Descripción / notas iniciales</label><textarea id="entityDescription" placeholder="Qué representa esta agrupación y por qué se crea…"></textarea></div>
+      <div class="field"><label>Evidencia que quedará asociada</label><div id="entitySelectedFindings" class="selected-list"></div></div>
+      <div class="notice">La creación agrupa evidencia; no modifica los findings ni convierte la agrupación en una identidad confirmada.</div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('entityModal')">Cancelar</button><button class="btn primary" id="saveEntityBtn">Crear perfil candidato</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="entityEditModal">
+  <div class="modal">
+    <header><h2>Editar perfil candidato</h2><button class="btn small" onclick="closeModal('entityEditModal')">Cerrar</button></header>
+    <div class="modal-body">
+      <div class="field"><label>Nombre de trabajo</label><input id="editEntityLabel"></div>
+      <div class="field"><label>Descripción / notas</label><textarea id="editEntityDescription"></textarea></div>
+      <div class="notice">Editar el nombre o las notas no modifica la evidencia original.</div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('entityEditModal')">Cancelar</button><button class="btn primary" id="saveEntityEditBtn">Guardar cambios</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="relationshipModal">
+  <div class="modal">
+    <header><h2>Crear relación entre entidades</h2><button class="btn small" onclick="closeModal('relationshipModal')">Cerrar</button></header>
+    <div class="modal-body">
+      <div id="relationshipEntities" class="notice" style="margin-bottom:10px"></div>
+      <div class="field"><label>Tipo de relación</label>
+        <select id="relationshipType">
+          <option value="associated_with">asociado con</option>
+          <option value="works_with">trabaja con</option>
+          <option value="colleague_of">colega de</option>
+          <option value="friend_of">amigo/a de</option>
+          <option value="relative_of">familiar de</option>
+          <option value="same_organization">misma organización</option>
+          <option value="same_location">misma ubicación</option>
+          <option value="mentioned_by">mencionado por</option>
+          <option value="mentioned_in">mencionado en</option>
+        </select>
+      </div>
+      <div class="field"><label>Correlación que sirve como evidencia (opcional)</label><select id="relationshipCorrelation"><option value="">Sin correlación seleccionada</option></select></div>
+      <div class="field"><label>Base / justificación observable</label><textarea id="relationshipBasis" placeholder="Describe qué evidencia sustenta la relación. Evita inferir una identidad solo por el nombre."></textarea></div>
+      <div class="notice">La relación se crea como <b>indeterminada</b>. Después podrás confirmarla o descartarla desde el detalle.</div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('relationshipModal')">Cancelar</button><button class="btn primary" id="saveRelationshipBtn">Crear relación</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="relationshipEditModal">
+  <div class="modal">
+    <header><h2>Editar relación</h2><button class="btn small" onclick="closeModal('relationshipEditModal')">Cerrar</button></header>
+    <div class="modal-body">
+      <div class="field"><label>Tipo de relación</label><input id="editRelationshipType"></div>
+      <div class="field"><label>Base / justificación observable</label><textarea id="editRelationshipBasis"></textarea></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('relationshipEditModal')">Cancelar</button><button class="btn primary" id="saveRelationshipEditBtn">Guardar cambios</button></div>
+  </div>
+</div>
+
+<script>
+const jobId = location.pathname.split('/').filter(Boolean).pop();
+const API = `/api/v1`;
+let graphData = null, cy = null, findings = [], entities = [], correlations = [], relationships = [];
+let selectedFindingIds = new Set(), selectedEntityIds = new Set(), selectedElement = null;
+let hiddenNodeIds = new Set(JSON.parse(localStorage.getItem(`kami:hidden:${jobId}`) || '[]'));
+const positionKey = `kami:positions:${jobId}`;
+let editingEntityId = null, editingRelationshipId = null;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+const labelMap = { shared_username:'usuario compartido', shared_email:'correo compartido', shared_phone:'teléfono compartido', shared_url:'URL compartida', shared_domain:'dominio compartido', shared_organization:'organización compartida', shared_location:'ubicación compartida' };
+const identityText = { indeterminado:'Indeterminado', pertenece:'Pertenece', no_pertenece:'No pertenece' };
+const relevanceText = { indeterminado:'Indeterminada', relevante:'Relevante', no_relevante:'No relevante' };
+const assessmentText = { indeterminado:'Indeterminada', confirmada:'Confirmada', descartada:'Descartada' };
+function closeModal(id){ document.getElementById(id).style.display='none'; }
+function openModal(id){ document.getElementById(id).style.display='flex'; }
+async function api(path, options={}) {
+  const r = await fetch(`${API}${path}`, { headers:{'Content-Type':'application/json', ...(options.headers||{})}, ...options });
+  let data = null; try { data = await r.json(); } catch {}
+  if (!r.ok) throw new Error(data?.detail || `HTTP ${r.status}`);
+  return data;
+}
+function badge(text, cls=''){ return `<span class="badge ${cls}">${esc(text)}</span>`; }
+function findingById(id){ return findings.find(f=>f.id===id); }
+function entityById(id){ return entities.find(e=>e.id===id); }
+function correlationById(id){ return correlations.find(c=>c.id===id); }
+function setDetails(html){ document.getElementById('details').innerHTML = html; }
+function sourceLink(url){ return url ? `<a href="${esc(url)}" target="_blank" rel="noopener">Abrir fuente</a>` : '—'; }
+
+function renderFindings(){
+  const source = document.getElementById('sourceFilter').value;
+  const q = document.getElementById('findingSearch').value.trim().toLowerCase();
+  const list = document.getElementById('findingList');
+  const rows = findings.filter(f => {
+    const hay = `${f.value} ${f.source} ${f.finding_type} ${f.source_url} ${f.match_reason}`.toLowerCase();
+    return (source==='all'||f.source===source) && (!q||hay.includes(q));
+  });
+  if (!rows.length){ list.innerHTML='<div class="empty">No hay findings que coincidan con el filtro.</div>'; return; }
+  list.innerHTML = rows.map(f => {
+    const selected = selectedFindingIds.has(f.id);
+    const ic = f.identity_assessment==='pertenece'?'ok':f.identity_assessment==='no_pertenece'?'no':'warn';
+    const rc = f.relevance_assessment==='relevante'?'ok':f.relevance_assessment==='no_relevante'?'no':'warn';
+    return `<div class="finding ${selected?'selected':''}" data-finding="${esc(f.id)}">
+      <input type="checkbox" ${selected?'checked':''} aria-label="Seleccionar finding">
+      <div class="finding-main">
+        <div class="finding-title">${esc(f.value)}</div>
+        <div class="finding-meta">${esc(f.source)} · ${esc(f.finding_type)} · fuerza de evidencia ${Number(f.evidence_strength).toFixed(2)}</div>
+        <div style="margin-top:4px">${badge(identityText[f.identity_assessment]||f.identity_assessment,ic)}${badge(relevanceText[f.relevance_assessment]||f.relevance_assessment,rc)}</div>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.finding').forEach(el => {
+    const id=el.dataset.finding;
+    el.querySelector('input').addEventListener('change', e => { toggleFinding(id,e.target.checked); });
+    el.querySelector('.finding-main').addEventListener('click', e => { if (!e.target.closest('a,button')) toggleFinding(id, !selectedFindingIds.has(id)); });
+  });
+  updateSelectionUI();
+}
+function toggleFinding(id, checked){ checked ? selectedFindingIds.add(id) : selectedFindingIds.delete(id); renderFindings(); syncGraphSelection(); }
+function updateSelectionUI(){
+  const n=selectedFindingIds.size;
+  document.getElementById('createEntityBtn').disabled=n===0;
+  document.getElementById('selectionHelp').textContent = n ? `${n} finding(s) seleccionado(s). Puedes crear una entidad candidata y asociar esta evidencia en un solo paso.` : 'Selecciona uno o varios findings para construir un perfil candidato.';
+}
+function selectVisible(){ document.querySelectorAll('#findingList .finding').forEach(el=>selectedFindingIds.add(el.dataset.finding)); renderFindings(); syncGraphSelection(); }
+function clearSelection(){ selectedFindingIds.clear(); selectedEntityIds.clear(); renderFindings(); renderEntities(); syncGraphSelection(); }
+
+function renderEntities(){
+  const list=document.getElementById('entityList');
+  if(!entities.length){ list.innerHTML='<div class="empty">Todavía no hay perfiles candidatos. Selecciona evidencia y crea el primero.</div>'; return; }
+  list.innerHTML=entities.map(e=>`<div class="entity-card ${selectedEntityIds.has(e.id)?'selected':''}" data-entity="${esc(e.id)}">
+    <div class="entity-name">${esc(e.label)}</div>
+    <div class="entity-meta">${e.findings.length} evidencia(s) asociada(s) · ${esc(e.entity_type)}</div>
+    <div class="entity-actions"><button class="btn small view-entity">Ver perfil</button><button class="btn small edit-entity">Editar</button><button class="btn small relation-entity">Relación</button></div>
+  </div>`).join('');
+  list.querySelectorAll('.entity-card').forEach(el=>{
+    const id=el.dataset.entity;
+    el.querySelector('.view-entity').onclick=()=>showEntity(id);
+    el.querySelector('.edit-entity').onclick=()=>openEntityEdit(id);
+    el.querySelector('.relation-entity').onclick=()=>toggleEntitySelection(id);
+  });
+}
+function toggleEntitySelection(id){
+  if(selectedEntityIds.has(id)) selectedEntityIds.delete(id); else selectedEntityIds.add(id);
+  if(selectedEntityIds.size>2){ const arr=[...selectedEntityIds]; selectedEntityIds=new Set(arr.slice(-2)); }
+  renderEntities(); syncGraphSelection();
+  if(selectedEntityIds.size===2) openRelationshipModal();
+}
+function syncGraphSelection(){
+  if(!cy) return;
+  cy.nodes().removeClass('investigator-selected');
+  selectedFindingIds.forEach(id=>cy.$(`#finding\\:${CSS.escape(id)}`).addClass('investigator-selected'));
+  selectedEntityIds.forEach(id=>cy.$(`#entity\\:${CSS.escape(id)}`).addClass('investigator-selected'));
+}
+
+function showFinding(id){
+  const f=findingById(id); if(!f) return;
+  setDetails(`<div class="detail-title">Finding</div><div class="detail-sub">${esc(f.source)} · ${esc(f.finding_type)}</div>
+    <div class="detail-actions"><button class="btn small" onclick="hideNode('finding:${esc(f.id)}')">Ocultar del grafo</button><button class="btn small" onclick="focusNode('finding:${esc(f.id)}')">Centrar en grafo</button></div>
+    <div class="detail-actions"><button class="btn small" onclick="assessFinding('${esc(f.id)}','identity_assessment','pertenece')">Marcar pertenece</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','identity_assessment','no_pertenece')">No pertenece</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','identity_assessment','indeterminado')">Indeterminado</button></div>
+    <div class="detail-actions"><button class="btn small" onclick="assessFinding('${esc(f.id)}','relevance_assessment','relevante')">Relevante</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','relevance_assessment','no_relevante')">No relevante</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','relevance_assessment','indeterminado')">Indeterminada</button></div>
+    ${kv('Valor',f.value)}${kv('Fuente',sourceLink(f.source_url),true)}${kv('Identidad',identityText[f.identity_assessment])}${kv('Relevancia',relevanceText[f.relevance_assessment])}${kv('Fuerza de evidencia',Number(f.evidence_strength).toFixed(2))}${kv('Razón de coincidencia',f.match_reason)}
+    <h3 style="margin-top:14px">Indicadores</h3>${f.indicators?.map(i=>`<div class="kv"><b>${esc(i.indicator_type)}</b>${esc(i.value)} <span style="color:var(--muted)">(${esc(i.normalized_value)})</span></div>`).join('')||'<div class="empty">Sin indicadores.</div>'}`);
+}
+function kv(k,v,raw=false){ return `<div class="kv"><b>${esc(k)}</b>${raw?v:esc(v??'—')}</div>`; }
+async function assessFinding(id, field, value){
+  try { const body={}; body[field]=value; await api(`/findings/${encodeURIComponent(id)}/assessment`,{method:'PATCH',body:JSON.stringify(body)}); await loadAll(); showFinding(id); }
+  catch(e){ alert(`No se pudo actualizar el finding: ${e.message}`); }
+}
+
+async function showEntity(id, preserveSelection=false){
+  try{
+    const p=await api(`/entities/${encodeURIComponent(id)}/profile`);
+    if(!preserveSelection){ selectedEntityIds=new Set([id]); renderEntities(); syncGraphSelection(); }
+    setDetails(`<div class="detail-title">${esc(p.label)}</div><div class="detail-sub">Perfil candidato · ${esc(p.entity_type)}</div>
+      <div class="detail-actions"><button class="btn primary small" onclick="toggleEntitySelection('${esc(id)}')">Seleccionar para relación</button><button class="btn small" onclick="openEntityEdit('${esc(id)}')">Editar perfil</button><button class="btn small" onclick="hideNode('entity:${esc(id)}')">Ocultar del grafo</button><button class="btn small" onclick="focusNode('entity:${esc(id)}')">Centrar en grafo</button></div>
+      ${kv('Descripción',p.description||'Sin descripción')}
+      <h3 style="margin-top:14px">Evidencia asociada (${p.findings.length})</h3>
+      ${p.findings.map(f=>`<div class="finding" style="margin-bottom:7px"><div class="finding-main"><div class="finding-title">${esc(f.value)}</div><div class="finding-meta">${esc(f.source)} · ${esc(f.finding_type)}</div></div></div>`).join('')||'<div class="empty">Sin evidencia.</div>'}
+      <div class="detail-actions"><button class="btn small" onclick="attachSelectedFindingsToEntity('${esc(id)}')" ${selectedFindingIds.size?'':'disabled'}>Añadir selección como evidencia</button></div>
+      <h3 style="margin-top:14px">Indicadores derivados (${p.indicators.length})</h3>
+      ${p.indicators.map(i=>`<div class="kv"><b>${esc(i.indicator_type)}</b>${esc(i.value)}</div>`).join('')||'<div class="empty">Sin indicadores.</div>'}
+      <h3 style="margin-top:14px">Relaciones (${p.relationships.length})</h3>
+      ${p.relationships.map(r=>`<div class="entity-card" style="margin-bottom:7px"><div class="entity-name">${esc(entityById(r.entity_a_id)?.label||r.entity_a_id)} ↔ ${esc(entityById(r.entity_b_id)?.label||r.entity_b_id)}</div><div class="entity-meta">${esc(r.relationship_type)} · ${esc(assessmentText[r.assessment]||r.assessment)}</div><button class="btn small" onclick="showRelationship('${esc(r.id)}')">Ver relación</button></div>`).join('')||'<div class="empty">Sin relaciones.</div>'}`);
+  }catch(e){ alert(`No se pudo cargar el perfil: ${e.message}`); }
+}
+function openEntityEdit(id){ const e=entityById(id); if(!e)return; editingEntityId=id; document.getElementById('editEntityLabel').value=e.label||''; document.getElementById('editEntityDescription').value=e.description||''; openModal('entityEditModal'); }
+async function saveEntityEdit(){ if(!editingEntityId)return; const label=document.getElementById('editEntityLabel').value.trim(); if(!label){alert('El nombre de trabajo no puede estar vacío.');return;} try{ await api(`/entities/${encodeURIComponent(editingEntityId)}`,{method:'PATCH',body:JSON.stringify({label,description:document.getElementById('editEntityDescription').value.trim()||null})}); const id=editingEntityId; closeModal('entityEditModal'); await loadAll(true); showEntity(id); }catch(e){alert(`No se pudo editar la entidad: ${e.message}`);} }
+async function attachSelectedFindingsToEntity(id){ if(!selectedFindingIds.size)return; try{ for(const findingId of selectedFindingIds){ await api(`/entities/${encodeURIComponent(id)}/findings`,{method:'POST',body:JSON.stringify({finding_id:findingId,role:'evidencia'})}); } await loadAll(true); showEntity(id); }catch(e){alert(`No se pudo asociar la evidencia: ${e.message}`);} }
+function showRelationship(id){ const r=relationships.find(x=>x.id===id); if(!r)return; const a=entityById(r.entity_a_id), b=entityById(r.entity_b_id); setDetails(`<div class="detail-title">Relación</div><div class="detail-sub">${esc(a?.label||r.entity_a_id)} ↔ ${esc(b?.label||r.entity_b_id)}</div>
+    <div class="detail-actions"><button class="btn small" onclick="openRelationshipEdit('${esc(r.id)}')">Editar relación</button><button class="btn success small" onclick="assessRelationship('${esc(r.id)}','confirmada')">Confirmar</button><button class="btn danger small" onclick="assessRelationship('${esc(r.id)}','descartada')">Descartar</button><button class="btn small" onclick="assessRelationship('${esc(r.id)}','indeterminado')">Indeterminada</button></div>
+    ${kv('Tipo',r.relationship_type)}${kv('Evaluación',assessmentText[r.assessment]||r.assessment)}${kv('Base',r.basis)}${r.evidence?.length ? `<h3 style="margin-top:14px">Evidencia de relación</h3>${r.evidence.map(e=>`<div class="kv"><b>Correlación</b>${esc(e.correlation_id||'')} · findings ${esc(e.finding_a_id||'')} / ${esc(e.finding_b_id||'')}</div>`).join('')}` : ''}`); }
+function openRelationshipEdit(id){ const r=relationships.find(x=>x.id===id); if(!r)return; editingRelationshipId=id; document.getElementById('editRelationshipType').value=r.relationship_type||''; document.getElementById('editRelationshipBasis').value=r.basis||''; openModal('relationshipEditModal'); }
+async function saveRelationshipEdit(){ if(!editingRelationshipId)return; const type=document.getElementById('editRelationshipType').value.trim(); const basis=document.getElementById('editRelationshipBasis').value.trim(); if(!type||!basis){alert('El tipo y la base son obligatorios.');return;} try{ await api(`/relationships/${encodeURIComponent(editingRelationshipId)}`,{method:'PATCH',body:JSON.stringify({relationship_type:type,basis})}); const id=editingRelationshipId; closeModal('relationshipEditModal'); await loadAll(true); showRelationship(id); }catch(e){alert(`No se pudo editar la relación: ${e.message}`);} }
+async function assessRelationship(id,value){ try{ await api(`/relationships/${encodeURIComponent(id)}/assessment`,{method:'PATCH',body:JSON.stringify({assessment:value})}); await loadAll(); showRelationship(id); }catch(e){ alert(`No se pudo evaluar la relación: ${e.message}`); } }
+function showCorrelation(id){
+  const c=correlationById(id); if(!c) return;
+  setDetails(`<div class="detail-title">Correlación</div><div class="detail-sub">${esc(labelMap[c.correlation_type]||c.correlation_type)}</div>
+    <div class="detail-actions"><button class="btn success small" onclick="assessCorrelation('${esc(c.id)}','confirmada')">Confirmar</button><button class="btn danger small" onclick="assessCorrelation('${esc(c.id)}','descartada')">Descartar</button><button class="btn small" onclick="assessCorrelation('${esc(c.id)}','indeterminado')">Indeterminada</button></div>
+    ${kv('Base',c.basis)}${kv('Evaluación',assessmentText[c.assessment]||c.assessment)}${kv('Finding A',findingById(c.finding_a_id)?.value||c.finding_a_id)}${kv('Finding B',findingById(c.finding_b_id)?.value||c.finding_b_id)}${c.evidence?.map(e=>kv(e.indicator_type,e.normalized_value)).join('')||''}`);
+}
+async function assessCorrelation(id,value){ try{ await api(`/correlations/${encodeURIComponent(id)}/assessment`,{method:'PATCH',body:JSON.stringify({assessment:value})}); await loadAll(); showCorrelation(id); }catch(e){ alert(`No se pudo evaluar la correlación: ${e.message}`); } }
+
+function openEntityModal(){
+  const ids=[...selectedFindingIds];
+  if(!ids.length) return;
+  document.getElementById('entityLabel').value=`Candidato ${entities.length+1}`;
+  document.getElementById('entityDescription').value='';
+  document.getElementById('entitySelectedFindings').innerHTML=ids.map(id=>{const f=findingById(id);return `<div class="selected-item">• ${esc(f?.value||id)} <span style="color:var(--muted)">(${esc(f?.source||'')})</span></div>`}).join('');
+  openModal('entityModal');
+}
+async function saveEntity(){
+  const label=document.getElementById('entityLabel').value.trim(); if(!label){alert('Escribe un nombre de trabajo para el candidato.');return;}
+  try{ await api(`/jobs/${encodeURIComponent(jobId)}/entities`,{method:'POST',body:JSON.stringify({label,entity_type:'person_candidate',description:document.getElementById('entityDescription').value.trim()||null,finding_ids:[...selectedFindingIds]})}); closeModal('entityModal'); selectedFindingIds.clear(); await loadAll(); }
+  catch(e){ alert(`No se pudo crear la entidad: ${e.message}`); }
+}
+function openRelationshipModal(){
+  if(selectedEntityIds.size!==2){alert('Selecciona exactamente dos entidades.');return;}
+  const [a,b]=[...selectedEntityIds], ea=entityById(a), eb=entityById(b);
+  document.getElementById('relationshipEntities').innerHTML=`<b>${esc(ea.label)}</b> ↔ <b>${esc(eb.label)}</b>`;
+  const sel=document.getElementById('relationshipCorrelation');
+  const eligible=correlations.filter(c=>{
+    const fa=entityById(a)?.findings.map(x=>x.finding_id)||[], fb=entityById(b)?.findings.map(x=>x.finding_id)||[];
+    return (fa.includes(c.finding_a_id)&&fb.includes(c.finding_b_id))||(fa.includes(c.finding_b_id)&&fb.includes(c.finding_a_id));
+  });
+  sel.innerHTML='<option value="">Sin correlación seleccionada</option>'+eligible.map(c=>`<option value="${esc(c.id)}">${esc(labelMap[c.correlation_type]||c.correlation_type)} · ${esc(c.basis)}</option>`).join('');
+  document.getElementById('relationshipBasis').value=eligible.length?`Evidencia asociada a correlación: ${eligible[0].basis}`:'';
+  openModal('relationshipModal');
+}
+async function saveRelationship(){
+  const [a,b]=[...selectedEntityIds]; const corr=document.getElementById('relationshipCorrelation').value||null;
+  const basis=document.getElementById('relationshipBasis').value.trim(); if(!basis){alert('Describe la base observable de la relación.');return;}
+  const c=corr?correlationById(corr):null;
+  try{ await api(`/jobs/${encodeURIComponent(jobId)}/relationships`,{method:'POST',body:JSON.stringify({entity_a_id:a,entity_b_id:b,relationship_type:document.getElementById('relationshipType').value,basis,assessment:'indeterminado',correlation_id:corr,finding_a_id:c?.finding_a_id||null,finding_b_id:c?.finding_b_id||null})}); closeModal('relationshipModal'); await loadAll(); }
+  catch(e){ alert(`No se pudo crear la relación: ${e.message}`); }
+}
+
+function readPositions(){ try{return JSON.parse(localStorage.getItem(positionKey)||'{}')}catch{return {};} }
+function savePositions(){ if(!cy)return; const positions={}; cy.nodes().forEach(n=>{positions[n.id()]={x:n.position('x'),y:n.position('y')};}); localStorage.setItem(positionKey,JSON.stringify(positions)); }
+function persistHidden(){localStorage.setItem(`kami:hidden:${jobId}`,JSON.stringify([...hiddenNodeIds]));}
+function hideNode(id){hiddenNodeIds.add(id);persistHidden();applyGraphFilters();}
+function showAllHidden(){hiddenNodeIds.clear();persistHidden();applyGraphFilters();}
+function focusNode(id){if(!cy)return;hiddenNodeIds.delete(id);persistHidden();applyGraphFilters();const n=cy.getElementById(id);if(n.length){cy.animate({fit:{eles:n,padding:140},duration:250});n.select();}}
+function hideSelected(){if(!cy)return;cy.nodes('.investigator-selected').forEach(n=>hiddenNodeIds.add(n.id()));persistHidden();applyGraphFilters();}
+function buildGraph(preserve=true){
+  const nodes=(graphData.nodes||[]).map(n=>({data:n})), edges=(graphData.edges||[]).map(e=>({data:e}));
+  const stored=readPositions(); if(cy){savePositions();cy.destroy();}
+  const allKnown=nodes.length>0&&nodes.every(n=>stored[n.data.id]);
+  cy=cytoscape({container:document.getElementById('cy'),elements:{nodes,edges},style:[
+    {selector:'node',style:{'label':'data(label)','font-size':10,'color':'#263247','text-wrap':'wrap','text-max-width':145,'background-color':'#9aa8bd','width':34,'height':34,'border-width':1,'border-color':'#718096','text-valign':'bottom','text-margin-y':7}},
+    {selector:'node[node_type="finding"]',style:{'shape':'roundrectangle','background-color':'#475569','color':'#1f2937','width':54,'height':38,'font-size':9}},
+    {selector:'node[node_type="indicator"]',style:{'shape':'ellipse','background-color':'#2d62d9','width':27,'height':27,'color':'#24324a','font-size':8}},
+    {selector:'node[node_type="entity"]',style:{'shape':'hexagon','background-color':'#15926a','width':58,'height':58,'font-size':11,'font-weight':700}},
+    {selector:'node[assessment="pertenece"]',style:{'border-color':'#16845b'}},
+    {selector:'node[assessment="no_pertenece"]',style:{'opacity':0.45,'border-style':'dashed'}},
+    {selector:'node[relevance="no_relevante"]',style:{'opacity':0.35}},
+    {selector:'edge',style:{'width':1.4,'line-color':'#a6b1c1','target-arrow-color':'#8b98aa','target-arrow-shape':'triangle','curve-style':'bezier','label':'data(edge_type)','font-size':8,'color':'#5e6b7d','text-background-opacity':1,'text-background-color':'#fbfcfe','text-background-padding':2}},
+    {selector:'edge[edge_type="correlation"]',style:{'line-style':'dashed','line-color':'#b7791f','target-arrow-color':'#b7791f'}},
+    {selector:'edge[edge_type="relationship"]',style:{'width':3,'line-color':'#15926a','target-arrow-color':'#15926a','label':'data(relationship_type)'}},
+    {selector:'.investigator-selected',style:{'border-width':4,'border-color':'#2457d6','background-color':'#e6edff'}},
+    {selector:':selected',style:{'border-width':3,'border-color':'#101827','line-color':'#101827','target-arrow-color':'#101827'}}
+  ],layout:allKnown&&preserve?{name:'preset',positions:n=>stored[n.id()],fit:false}:{name:'cose',animate:false,padding:60,nodeRepulsion:8000,idealEdgeLength:130}});
+  cy.on('dragfree','node',savePositions);
+  cy.on('tap','node',e=>{selectedElement=e.target.data();const d=selectedElement;if(d.node_type==='finding')showFinding(d.id.replace('finding:',''));else if(d.node_type==='entity'){const id=d.id.replace('entity:','');showEntity(id,true);toggleEntitySelection(id);}else setDetails(`<div class="detail-title">Indicador</div><div class="detail-sub">${esc(d.indicator_type||'')}</div>${kv('Valor',d.label)}${kv('Normalizado',d.normalized_value)}${kv('Fuente',d.source||'')}`);});
+  cy.on('tap','edge',e=>{const d=e.target.data();if(d.edge_type==='correlation')showCorrelation(d.correlation_id);else if(d.edge_type==='relationship')showRelationship(d.relationship_id);else setDetails(`<div class="detail-title">Evidencia ↔ indicador</div>${kv('Campo de procedencia',d.basis||'')}`);});
+  if(!allKnown&&preserve){const knownIds=Object.keys(stored);cy.one('layoutstop',()=>{knownIds.forEach(id=>{const n=cy.getElementById(id);if(n.length)n.position(stored[id]);});savePositions();});}
+  else if(!allKnown)cy.one('layoutstop',savePositions);
+  applyGraphFilters();syncGraphSelection();
+}
+function applyGraphFilters(){
+  if(!cy)return;const type=document.getElementById('nodeTypeFilter').value,source=document.getElementById('sourceFilter').value,q=document.getElementById('findingSearch').value.trim().toLowerCase();
+  const showIndicators=document.getElementById('showIndicators').checked,showCorrelations=document.getElementById('showCorrelations').checked,showMemberships=document.getElementById('showMemberships').checked;
+  cy.nodes().forEach(n=>{const d=n.data(),hidden=hiddenNodeIds.has(n.id()),okType=type==='all'||d.node_type===type,okSource=source==='all'||!['finding','indicator'].includes(d.node_type)||d.source===source,hay=`${d.label||''} ${d.normalized_value||''}`.toLowerCase(),okQ=!q||hay.includes(q),okIndicator=showIndicators||d.node_type!=='indicator';n.style('display',!hidden&&okType&&okSource&&okQ&&okIndicator?'element':'none');});
+  cy.edges().forEach(e=>{const d=e.data(),visible=e.source().style('display')!=='none'&&e.target().style('display')!=='none',okCorr=showCorrelations||d.edge_type!=='correlation',okMem=showMemberships||d.edge_type!=='entity_membership';e.style('display',visible&&okCorr&&okMem?'element':'none');});
+}
+async function runManualSearch(){const input=document.getElementById('manualSearch'),status=document.getElementById('searchStatus'),btn=document.getElementById('manualSearchBtn'),query=input.value.trim();if(query.length<2){status.textContent='Escribe al menos 2 caracteres.';return;}btn.disabled=true;status.textContent='Buscando en las fuentes configuradas…';try{const r=await api(`/jobs/${encodeURIComponent(jobId)}/search/name`,{method:'POST',body:JSON.stringify({query})});status.textContent=`Búsqueda enviada. Actualizando resultados…`;let tries=0;const poll=setInterval(async()=>{tries++;try{await loadAll(true);if(findings.some(f=>f.input_value===query)){clearInterval(poll);status.textContent='Búsqueda completada. Los resultados forman parte de la investigación.';}else if(tries>=20){clearInterval(poll);status.textContent='La búsqueda sigue procesándose; puedes actualizar más tarde.';}}catch{}},1500);void r;}catch(e){status.textContent=`No se pudo ejecutar la búsqueda: ${e.message}`;}finally{setTimeout(()=>btn.disabled=false,1000);}}
+async function loadAll(preserve=true){
+  try{const [job,g,f,c,e,r]=await Promise.all([api(`/jobs/${encodeURIComponent(jobId)}`),api(`/jobs/${encodeURIComponent(jobId)}/graph`),api(`/jobs/${encodeURIComponent(jobId)}/findings`),api(`/jobs/${encodeURIComponent(jobId)}/correlations`),api(`/jobs/${encodeURIComponent(jobId)}/entities`),api(`/jobs/${encodeURIComponent(jobId)}/relationships`)]);graphData=g;findings=f;correlations=c;entities=e;relationships=r;document.getElementById('jobLabel').textContent=`Investigación: ${job.input_value} · Estado: ${job.status} · ID: ${job.id}`;document.getElementById('nFindings').textContent=g.summary?.findings??job.finding_count??0;document.getElementById('nIndicators').textContent=g.summary?.indicators??0;document.getElementById('nCorrelations').textContent=g.summary?.correlations??job.correlation_count??0;document.getElementById('nEntities').textContent=g.summary?.entities??entities.length;const sf=document.getElementById('sourceFilter'),old=sf.value;sf.innerHTML='<option value="all">Todas las fuentes</option>'+[...new Set(findings.map(f=>f.source))].sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');sf.value=[...sf.options].some(o=>o.value===old)?old:'all';renderFindings();renderEntities();buildGraph(preserve);}catch(e){setDetails(`<div class="error"><b>No se pudo cargar la investigación.</b><p>${esc(e.message)}</p><p>Comprueba que el API esté activo y que el job exista.</p></div>`);}}
+document.getElementById('sourceFilter').onchange=()=>{renderFindings();applyGraphFilters();};
+document.getElementById('findingSearch').oninput=()=>{renderFindings();applyGraphFilters();};
+document.getElementById('nodeTypeFilter').onchange=applyGraphFilters;
+document.getElementById('showIndicators').onchange=applyGraphFilters;
+document.getElementById('showCorrelations').onchange=applyGraphFilters;
+document.getElementById('showMemberships').onchange=applyGraphFilters;
+document.getElementById('fitBtn').onclick=()=>cy?.fit(cy.elements(':visible'),50);
+document.getElementById('resetGraphBtn').onclick=()=>{hiddenNodeIds.clear();persistHidden();document.getElementById('nodeTypeFilter').value='all';document.getElementById('sourceFilter').value='all';document.getElementById('findingSearch').value='';renderFindings();applyGraphFilters();cy?.fit(cy.elements(':visible'),50);};
+document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElementById('showHiddenBtn').onclick=showAllHidden;document.getElementById('selectVisible').onclick=selectVisible;document.getElementById('clearSelection').onclick=clearSelection;document.getElementById('createEntityBtn').onclick=openEntityModal;document.getElementById('saveEntityBtn').onclick=saveEntity;document.getElementById('saveEntityEditBtn').onclick=saveEntityEdit;document.getElementById('saveRelationshipBtn').onclick=saveRelationship;document.getElementById('saveRelationshipEditBtn').onclick=saveRelationshipEdit;document.getElementById('manualSearchBtn').onclick=runManualSearch;document.getElementById('manualSearch').addEventListener('keydown',e=>{if(e.key==='Enter')runManualSearch();});document.getElementById('reloadBtn').onclick=()=>loadAll(true);
+loadAll(true);
+</script>
+</body>
+</html>

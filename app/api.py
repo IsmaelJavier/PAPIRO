@@ -2,18 +2,29 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import func, select
 
 from app.db import db_session
-from app.models import Correlation, Finding
+from app.models import Correlation, Entity, Finding, Relationship
 from app.repository import Repository
 from app.schemas import (
     CorrelationAssessmentRequest,
     CorrelationResponse,
+    EntityCreateRequest,
+    EntityUpdateRequest,
+    EntityFindingAttachRequest,
+    EntityResponse,
+    ProfileResponse,
+    GraphResponse,
+    RelationshipCreateRequest,
+    RelationshipUpdateRequest,
+    ManualNameSearchRequest,
+    RelationshipResponse,
+    RelationshipAssessmentRequest,
     FindingAssessmentRequest,
     FindingResponse,
     IngestNameRequest,
     JobCreatedResponse,
     JobResponse,
 )
-from app.tasks import process_person_name_job
+from app.tasks import process_person_name_job, process_manual_person_name_search
 
 
 router = APIRouter(prefix="/api/v1")
@@ -81,6 +92,45 @@ def finding_to_response(
     )
 
 
+def entity_to_response(row: Entity) -> EntityResponse:
+    return EntityResponse(
+        id=row.id,
+        job_id=row.job_id,
+        label=row.label,
+        entity_type=row.entity_type,
+        description=row.description,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        findings=[
+            {"id": item.id, "finding_id": item.finding_id, "role": item.role}
+            for item in row.findings
+        ],
+    )
+
+
+def relationship_to_response(row: Relationship) -> RelationshipResponse:
+    return RelationshipResponse(
+        id=row.id,
+        job_id=row.job_id,
+        entity_a_id=row.entity_a_id,
+        entity_b_id=row.entity_b_id,
+        relationship_type=row.relationship_type,
+        basis=row.basis,
+        assessment=row.assessment,
+        assessment_note=row.assessment_note,
+        assessment_updated_at=row.assessment_updated_at,
+        created_at=row.created_at,
+        evidence=[
+            {
+                "correlation_id": item.correlation_id,
+                "finding_a_id": item.finding_a_id,
+                "finding_b_id": item.finding_b_id,
+            }
+            for item in row.evidence
+        ],
+    )
+
+
 @router.post(
     "/ingest/name",
     response_model=JobCreatedResponse,
@@ -115,6 +165,20 @@ def ingest_name(
         job_id=job_id,
         status="queued",
     )
+
+
+@router.post(
+    "/jobs/{job_id}/search/name",
+    status_code=202,
+)
+def manual_name_search(job_id: str, payload: ManualNameSearchRequest):
+    query = " ".join(payload.query.split()).strip()
+    with db_session() as session:
+        repo = Repository(session)
+        if not repo.get_job(job_id):
+            raise HTTPException(status_code=404, detail="job not found")
+    task = process_manual_person_name_search.delay(job_id, query)
+    return {"job_id": job_id, "query": query, "task_id": task.id, "status": "queued"}
 
 
 @router.get(
@@ -222,6 +286,241 @@ def get_correlations(
 
         rows = repo.get_correlations(job_id)
         return [correlation_to_response(row) for row in rows]
+
+
+@router.get(
+    "/jobs/{job_id}/graph",
+    response_model=GraphResponse,
+)
+def get_graph(job_id: str):
+    with db_session() as session:
+        repo = Repository(session)
+        if not repo.get_job(job_id):
+            raise HTTPException(status_code=404, detail="job not found")
+        return repo.get_graph(job_id)
+
+
+@router.post(
+    "/jobs/{job_id}/entities",
+    response_model=EntityResponse,
+    status_code=201,
+)
+def create_entity(job_id: str, payload: EntityCreateRequest):
+    with db_session() as session:
+        repo = Repository(session)
+        if not repo.get_job(job_id):
+            raise HTTPException(status_code=404, detail="job not found")
+        try:
+            entity = repo.create_entity(
+                job_id, payload.label, entity_type=payload.entity_type,
+                description=payload.description,
+                finding_ids=payload.finding_ids,
+            )
+            session.commit()
+        except ValueError as exc:
+            session.rollback()
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        entity = repo.get_entity(entity.id)
+        return entity_to_response(entity)
+
+
+@router.patch(
+    "/entities/{entity_id}",
+    response_model=EntityResponse,
+)
+def update_entity(entity_id: str, payload: EntityUpdateRequest):
+    with db_session() as session:
+        repo = Repository(session)
+        entity = repo.get_entity(entity_id)
+        if not entity:
+            raise HTTPException(status_code=404, detail="entity not found")
+        repo.update_entity(
+            entity,
+            label=payload.label,
+            description=payload.description,
+        )
+        session.commit()
+        return entity_to_response(repo.get_entity(entity_id))
+
+
+@router.get(
+    "/jobs/{job_id}/entities",
+    response_model=list[EntityResponse],
+)
+def get_entities(job_id: str):
+    with db_session() as session:
+        repo = Repository(session)
+        if not repo.get_job(job_id):
+            raise HTTPException(status_code=404, detail="job not found")
+        return [entity_to_response(row) for row in repo.get_entities(job_id)]
+
+
+@router.get(
+    "/entities/{entity_id}/profile",
+    response_model=ProfileResponse,
+)
+def get_entity_profile(entity_id: str):
+    with db_session() as session:
+        repo = Repository(session)
+        entity = repo.get_entity(entity_id)
+        if not entity:
+            raise HTTPException(status_code=404, detail="entity not found")
+
+        relationships = [
+            row for row in repo.get_relationships(entity.job_id)
+            if row.entity_a_id == entity.id or row.entity_b_id == entity.id
+        ]
+        findings = [item.finding for item in entity.findings]
+        indicator_map = {}
+        for finding in findings:
+            for indicator in finding.indicators:
+                indicator_map[(indicator.indicator_type, indicator.normalized_value)] = indicator
+
+        return ProfileResponse(
+            id=entity.id,
+            job_id=entity.job_id,
+            label=entity.label,
+            entity_type=entity.entity_type,
+            description=entity.description,
+            findings=[finding_to_response(row) for row in findings],
+            indicators=[
+                {
+                    "id": item.id,
+                    "indicator_type": item.indicator_type,
+                    "value": item.value,
+                    "normalized_value": item.normalized_value,
+                    "provenance_field": item.provenance_field,
+                }
+                for item in indicator_map.values()
+            ],
+            relationships=[relationship_to_response(row) for row in relationships],
+        )
+
+
+@router.post(
+    "/entities/{entity_id}/findings",
+    response_model=EntityResponse,
+)
+def attach_finding(entity_id: str, payload: EntityFindingAttachRequest):
+    with db_session() as session:
+        repo = Repository(session)
+        entity = repo.get_entity(entity_id)
+        finding = repo.get_finding(payload.finding_id)
+        if not entity:
+            raise HTTPException(status_code=404, detail="entity not found")
+        if not finding:
+            raise HTTPException(status_code=404, detail="finding not found")
+        try:
+            repo.attach_finding_to_entity(entity, finding, role=payload.role)
+            session.commit()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        entity = repo.get_entity(entity_id)
+        return entity_to_response(entity)
+
+
+@router.post(
+    "/jobs/{job_id}/relationships",
+    response_model=RelationshipResponse,
+    status_code=201,
+)
+def create_relationship(job_id: str, payload: RelationshipCreateRequest):
+    with db_session() as session:
+        repo = Repository(session)
+        if not repo.get_job(job_id):
+            raise HTTPException(status_code=404, detail="job not found")
+        entity_a = repo.get_entity(payload.entity_a_id)
+        entity_b = repo.get_entity(payload.entity_b_id)
+        if not entity_a or not entity_b:
+            raise HTTPException(status_code=404, detail="entity not found")
+        if entity_a.job_id != job_id or entity_b.job_id != job_id:
+            raise HTTPException(status_code=422, detail="entities must belong to the job")
+        if payload.correlation_id:
+            correlation = session.get(Correlation, payload.correlation_id)
+            if not correlation or correlation.job_id != job_id:
+                raise HTTPException(status_code=422, detail="correlation does not belong to the job")
+        try:
+            relationship = repo.create_relationship(
+                job_id, entity_a, entity_b,
+                relationship_type=payload.relationship_type,
+                basis=payload.basis,
+                assessment=payload.assessment,
+                correlation_id=payload.correlation_id,
+                finding_a_id=payload.finding_a_id,
+                finding_b_id=payload.finding_b_id,
+            )
+            relationship_id = relationship.id
+            session.commit()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        created = next(
+            row for row in repo.get_relationships(job_id)
+            if row.id == relationship_id
+        )
+        return relationship_to_response(created)
+
+
+@router.patch(
+    "/relationships/{relationship_id}",
+    response_model=RelationshipResponse,
+)
+def update_relationship(relationship_id: str, payload: RelationshipUpdateRequest):
+    with db_session() as session:
+        repo = Repository(session)
+        relationship = session.get(Relationship, relationship_id)
+        if not relationship:
+            raise HTTPException(status_code=404, detail="relationship not found")
+        try:
+            repo.update_relationship(
+                relationship,
+                relationship_type=payload.relationship_type,
+                basis=payload.basis,
+            )
+            session.commit()
+        except ValueError as exc:
+            session.rollback()
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        created = next(
+            row for row in repo.get_relationships(relationship.job_id)
+            if row.id == relationship_id
+        )
+        return relationship_to_response(created)
+
+
+@router.get(
+    "/jobs/{job_id}/relationships",
+    response_model=list[RelationshipResponse],
+)
+def get_relationships(job_id: str):
+    with db_session() as session:
+        repo = Repository(session)
+        if not repo.get_job(job_id):
+            raise HTTPException(status_code=404, detail="job not found")
+        return [relationship_to_response(row) for row in repo.get_relationships(job_id)]
+
+
+@router.patch(
+    "/relationships/{relationship_id}/assessment",
+    response_model=RelationshipResponse,
+)
+def assess_relationship(relationship_id: str, payload: RelationshipAssessmentRequest):
+    with db_session() as session:
+        repo = Repository(session)
+        relationship = session.get(Relationship, relationship_id)
+        if not relationship:
+            raise HTTPException(status_code=404, detail="relationship not found")
+        repo.assess_relationship(
+            relationship,
+            assessment=payload.assessment,
+            assessment_note=payload.assessment_note,
+            update_note="assessment_note" in payload.model_fields_set,
+        )
+        session.commit()
+        created = next(
+            row for row in repo.get_relationships(relationship.job_id)
+            if row.id == relationship_id
+        )
+        return relationship_to_response(created)
 
 
 @router.patch(
