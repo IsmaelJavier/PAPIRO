@@ -100,3 +100,76 @@ The person-name ingestion now queries two independent public sources:
 - Wikidata (`wikidata_person_search`)
 
 The Wikidata module uses the public Wikibase Action API (`wbsearchentities` followed by `wbgetentities`) and stores each returned entity as a canonical finding. It exposes the Wikidata Q-ID and available English/Spanish Wikipedia sitelinks as indicators. As with GitHub, evidence strength is not an identity probability; identity and relevance remain investigator assessments.
+
+## Entidades, perfiles y grafo de investigación
+
+El tercer incremento añade una capa de reconstrucción gestionada por el investigador. Una `Entity` representa un candidato de perfil dentro de un trabajo; no equivale automáticamente a una persona real ni resuelve identidad.
+
+Flujo:
+
+`Finding → Indicator → Correlation → Entity → Relationship → Graph`
+
+### Principios de la capa de entidad
+
+- Una entidad se crea explícitamente como contenedor de investigación (`person_candidate`).
+- Los findings se pueden asociar a una entidad con un rol descriptivo.
+- Las relaciones entre entidades son independientes de la identidad y comienzan en `indeterminado`.
+- Una relación puede documentar la correlación que la sustenta mediante `correlation_id` y findings.
+- La API mantiene trazabilidad desde el grafo hacia findings, indicadores y fuentes.
+- No se fusionan automáticamente personas ni se emiten conclusiones de identidad.
+
+### API de exploración
+
+Obtener la proyección completa del grafo:
+
+```bash
+curl http://localhost:8000/api/v1/jobs/<JOB_ID>/graph
+```
+
+Abrir la visualización interactiva en el navegador:
+
+```text
+http://localhost:8000/ui/graph/<JOB_ID>
+```
+
+Crear una entidad candidata:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/jobs/<JOB_ID>/entities \
+  -H "Content-Type: application/json" \
+  -d '{"label":"Candidato 1","description":"Agrupación para evaluación del investigador"}'
+```
+
+Asociar un finding:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/entities/<ENTITY_ID>/findings \
+  -H "Content-Type: application/json" \
+  -d '{"finding_id":"<FINDING_ID>","role":"perfil"}'
+```
+
+Crear una relación entre entidades:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/jobs/<JOB_ID>/relationships \
+  -H "Content-Type: application/json" \
+  -d '{"entity_a_id":"<ENTITY_A>","entity_b_id":"<ENTITY_B>","relationship_type":"associated_with","basis":"shared_username:johnsmith","correlation_id":"<CORRELATION_ID>"}'
+```
+
+Evaluar una relación:
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/relationships/<RELATIONSHIP_ID>/assessment \
+  -H "Content-Type: application/json" \
+  -d '{"assessment":"confirmada","assessment_note":"La relación fue revisada por el investigador."}'
+```
+
+### Migración 003
+
+Con PostgreSQL activo y después de ejecutar la migración 002:
+
+```bash
+cat migrations/003_entities_graph.sql | docker compose exec -T postgres psql -U kami -d kami_eye
+```
+
+No se debe eliminar el volumen de PostgreSQL.
