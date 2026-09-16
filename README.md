@@ -226,3 +226,17 @@ Por ejemplo:
 ```text
 https://<codespace>-8000.app.github.dev/ui/job/ac1d9bb2-86c1-4259-a370-1b8d4d1fc673
 ```
+
+## Correcciones y mejoras del espacio de investigación
+
+La interfaz `/ui/job/{JOB_ID}` incorpora ahora:
+
+- Persistencia local de la posición de los nodos del grafo al arrastrarlos, evitando que una evaluación de finding reorganice el grafo de forma aleatoria.
+- Ocultación/recuperación de nodos sin eliminar evidencia de la base de datos.
+- Controles para mostrar u ocultar indicadores, correlaciones y aristas de pertenencia.
+- Edición del nombre y descripción de entidades candidatas.
+- Asociación posterior de varios findings seleccionados a una entidad existente.
+- Edición del tipo y base de una relación.
+- Nueva búsqueda de persona contra las fuentes configuradas mediante `POST /api/v1/jobs/{job_id}/search/name`; los findings nuevos se incorporan a la investigación y, cuando corresponde, se recalculan las correlaciones deterministas.
+
+Las posiciones y nodos ocultos son preferencias locales del navegador en esta iteración; no modifican la evidencia ni eliminan datos. La persistencia server-side de la vista podrá añadirse posteriormente.

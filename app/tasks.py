@@ -113,3 +113,60 @@ def process_person_name_job(job_id: str):
             "failed_sources": failed_sources,
             "errors": source_errors,
         }
+
+
+@celery_app.task(name="app.tasks.process_manual_person_name_search")
+def process_manual_person_name_search(job_id: str, query: str):
+    """Run the configured person-name sources for an investigator-entered query.
+
+    This is deliberately additive: findings are deduplicated against the job's
+    existing evidence and no prior assessment/entity is changed.
+    """
+    with db_session() as session:
+        repo = Repository(session)
+        job = repo.get_job(job_id)
+        if not job:
+            return {"job_id": job_id, "status": "missing", "query": query}
+
+        sources = get_person_name_sources()
+        added_findings = 0
+        successful_sources = 0
+        errors: list[str] = []
+
+        for source in sources:
+            run = repo.create_run(job.id, source.module_name, source.name, query)
+            try:
+                # Sources expose the same contract; temporarily build the
+                # canonical input through the source's public name-search API.
+                result = source.search_person_name(query)
+                before = len(repo.get_findings(job.id))
+                for finding, indicators in result.findings:
+                    repo.add_finding(job.id, finding, indicators)
+                after = len(repo.get_findings(job.id))
+                added_findings += max(0, after - before)
+                successful_sources += 1
+                repo.finish_run(run, RunStatus.success, result.http_status,
+                                rate_limit_remaining=result.rate_limit_remaining)
+            except (GitHubRateLimitError, WikidataRateLimitError) as exc:
+                errors.append(f"{source.name}: {exc}")
+                repo.finish_run(run, RunStatus.rate_limited, error=str(exc))
+            except httpx.TimeoutException as exc:
+                errors.append(f"{source.name}: {exc}")
+                repo.finish_run(run, RunStatus.timeout, error=str(exc))
+            except httpx.HTTPStatusError as exc:
+                errors.append(f"{source.name}: {exc}")
+                status = exc.response.status_code if exc.response is not None else None
+                repo.finish_run(run, RunStatus.failed, http_status=status, error=str(exc))
+            except Exception as exc:
+                errors.append(f"{source.name}: {exc}")
+                repo.finish_run(run, RunStatus.failed, error=str(exc))
+
+        correlation_count = len(repo.correlate_job(job.id)) if len(repo.get_findings(job.id)) > 1 else 0
+        return {
+            "job_id": job.id,
+            "query": query,
+            "status": "completed" if successful_sources == len(sources) else "partial",
+            "added_findings": added_findings,
+            "correlations": correlation_count,
+            "errors": errors,
+        }
