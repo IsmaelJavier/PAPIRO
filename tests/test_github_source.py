@@ -28,8 +28,8 @@ def test_person_name_produces_canonical_finding_and_indicators():
     finding, indicators = result.findings[0]
     assert finding.finding_type == "social_profile"
     assert finding.value == "https://github.com/monalisa"
-    assert finding.confidence == 0.95
-    assert finding.relevance_reason == "exact_public_profile_name_match"
+    assert finding.evidence_strength == 0.95
+    assert finding.match_reason == "exact_public_profile_name_match"
     kinds = {(i.indicator_type, i.provenance_field) for i in indicators}
     assert ("username", "login") in kinds
     assert ("email", "email") in kinds
@@ -53,5 +53,5 @@ def test_weak_name_match_is_not_asserted_as_identity():
 
     result = GitHubSource(client=make_client(handler)).search_person_name("John Smith")
     finding, _ = result.findings[0]
-    assert finding.confidence == 0.30
-    assert finding.relevance_reason == "github_search_candidate_without_strong_name_match"
+    assert finding.evidence_strength == 0.30
+    assert finding.match_reason == "github_search_candidate_without_strong_name_match"

@@ -55,8 +55,8 @@ def test_person_name_produces_knowledge_finding_and_indicators():
     finding, indicators = result.findings[0]
     assert finding.finding_type == "knowledge_entity"
     assert finding.value == "Q34253"
-    assert finding.confidence == 0.95
-    assert finding.relevance_reason == "exact_wikidata_label_match"
+    assert finding.evidence_strength == 0.95
+    assert finding.match_reason == "exact_wikidata_label_match"
     kinds = {(i.indicator_type, i.provenance_field) for i in indicators}
     assert ("wikidata_id", "id") in kinds
     assert ("url", "entity_url") in kinds
@@ -87,5 +87,5 @@ def test_alias_match_has_distinct_evidence_reason():
 
     result = WikidataSource(client=make_client(handler)).search_person_name("John Smith")
     finding, _ = result.findings[0]
-    assert finding.confidence == 0.85
-    assert finding.relevance_reason == "exact_wikidata_alias_match"
+    assert finding.evidence_strength == 0.85
+    assert finding.match_reason == "exact_wikidata_alias_match"

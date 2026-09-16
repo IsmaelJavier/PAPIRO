@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 from app.config import settings
+from app.sources.base import SourceResult
 from app.domain import (
     CanonicalFinding,
     ExtractedIndicator,
@@ -21,17 +21,6 @@ class WikidataSourceError(Exception):
 class WikidataRateLimitError(WikidataSourceError):
     pass
 
-
-@dataclass
-class WikidataSearchResult:
-    findings: list[
-        tuple[
-            CanonicalFinding,
-            list[ExtractedIndicator],
-        ]
-    ]
-    http_status: int
-    rate_limit_remaining: int | None
 
 
 class WikidataSource:
@@ -172,7 +161,7 @@ class WikidataSource:
 
         return indicators
 
-    def search_person_name(self, name: str) -> WikidataSearchResult:
+    def search_person_name(self, name: str) -> SourceResult:
         search_response = self.client.get(
             "/w/api.php",
             params={
@@ -195,7 +184,7 @@ class WikidataSource:
 
         ids = [item.get("id") for item in search_items if item.get("id")]
         if not ids:
-            return WikidataSearchResult(
+            return SourceResult(
                 findings=[],
                 http_status=search_response.status_code,
                 rate_limit_remaining=remaining,
@@ -251,8 +240,8 @@ class WikidataSource:
                 input_type="person_name",
                 finding_type="knowledge_entity",
                 value=entity_id,
-                confidence=evidence_strength,
-                relevance_reason=reason,
+                evidence_strength=evidence_strength,
+                match_reason=reason,
                 raw_evidence={
                     "search_entity": item,
                     "entity": entity,
@@ -260,7 +249,7 @@ class WikidataSource:
             )
             findings.append((finding, self._indicators(entity_id, entity)))
 
-        return WikidataSearchResult(
+        return SourceResult(
             findings=findings,
             http_status=search_response.status_code,
             rate_limit_remaining=remaining,

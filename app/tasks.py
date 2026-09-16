@@ -3,8 +3,9 @@ import httpx
 from app.db import db_session
 from app.models import JobStatus, RunStatus
 from app.repository import Repository
-from app.sources.github import GitHubRateLimitError, GitHubSource
-from app.sources.wikidata import WikidataRateLimitError, WikidataSource
+from app.sources.github import GitHubRateLimitError
+from app.sources.wikidata import WikidataRateLimitError
+from app.sources.registry import get_person_name_sources
 from app.worker import celery_app
 
 
@@ -19,7 +20,7 @@ def process_person_name_job(job_id: str):
         repo.mark_job_running(job)
         session.flush()
 
-        sources = [GitHubSource(), WikidataSource()]
+        sources = get_person_name_sources()
         total_findings = 0
         successful_sources = 0
         failed_sources = 0
@@ -96,11 +97,17 @@ def process_person_name_job(job_id: str):
             final_status = JobStatus.failed
             error = "; ".join(source_errors)
 
+        correlation_count = 0
+        if total_findings > 1:
+            correlations = repo.correlate_job(job.id)
+            correlation_count = len(correlations)
+
         repo.mark_job_finished(job, final_status, error)
         return {
             "job_id": job.id,
             "status": final_status.value,
             "findings": total_findings,
+            "correlations": correlation_count,
             "successful_sources": successful_sources,
             "partial_sources": partial_sources,
             "failed_sources": failed_sources,

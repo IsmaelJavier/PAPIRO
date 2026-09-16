@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 from app.config import settings
+from app.sources.base import SourceResult
 from app.domain import (
     CanonicalFinding,
     ExtractedIndicator,
@@ -22,17 +22,6 @@ class GitHubSourceError(Exception):
 class GitHubRateLimitError(GitHubSourceError):
     pass
 
-
-@dataclass
-class GitHubSearchResult:
-    findings: list[
-        tuple[
-            CanonicalFinding,
-            list[ExtractedIndicator],
-        ]
-    ]
-    http_status: int
-    rate_limit_remaining: int | None
 
 
 class GitHubSource:
@@ -275,7 +264,7 @@ class GitHubSource:
     def search_person_name(
         self,
         name: str,
-    ) -> GitHubSearchResult:
+    ) -> SourceResult:
         """
         Discover GitHub user profiles whose public name field is related
         to the supplied person name.
@@ -373,8 +362,8 @@ class GitHubSource:
                 finding_type="social_profile",
                 value=source_url,
 
-                confidence=evidence_strength,
-                relevance_reason=reason,
+                evidence_strength=evidence_strength,
+                match_reason=reason,
 
                 raw_evidence={
                     "search_candidate": item,
@@ -391,7 +380,7 @@ class GitHubSource:
                 )
             )
 
-        return GitHubSearchResult(
+        return SourceResult(
             findings=findings,
             http_status=search_response.status_code,
             rate_limit_remaining=remaining,
