@@ -4,6 +4,7 @@ from app.db import db_session
 from app.models import JobStatus, RunStatus
 from app.repository import Repository
 from app.sources.github import GitHubRateLimitError, GitHubSource
+from app.sources.wikidata import WikidataRateLimitError, WikidataSource
 from app.worker import celery_app
 
 
@@ -18,36 +19,90 @@ def process_person_name_job(job_id: str):
         repo.mark_job_running(job)
         session.flush()
 
-        source = GitHubSource()
-        run = repo.create_run(job.id, source.module_name, source.name, job.input_value)
+        sources = [GitHubSource(), WikidataSource()]
+        total_findings = 0
+        successful_sources = 0
+        failed_sources = 0
+        partial_sources = 0
+        source_errors: list[str] = []
 
-        try:
-            result = source.search_person_name(job.input_value)
-            for finding, indicators in result.findings:
-                repo.add_finding(job.id, finding, indicators)
+        for source in sources:
+            run = repo.create_run(
+                job.id,
+                source.module_name,
+                source.name,
+                job.input_value,
+            )
 
-            repo.finish_run(run, RunStatus.success, result.http_status,
-                            rate_limit_remaining=result.rate_limit_remaining)
-            repo.mark_job_finished(job, JobStatus.completed)
-            return {"job_id": job.id, "status": "completed", "findings": len(result.findings)}
+            try:
+                result = source.search_person_name(job.input_value)
+                for finding, indicators in result.findings:
+                    repo.add_finding(job.id, finding, indicators)
 
-        except GitHubRateLimitError as exc:
-            repo.finish_run(run, RunStatus.rate_limited, error=str(exc))
-            repo.mark_job_finished(job, JobStatus.partial, str(exc))
-            return {"job_id": job.id, "status": "partial", "error": str(exc)}
+                total_findings += len(result.findings)
+                successful_sources += 1
+                repo.finish_run(
+                    run,
+                    RunStatus.success,
+                    result.http_status,
+                    rate_limit_remaining=result.rate_limit_remaining,
+                )
 
-        except httpx.TimeoutException as exc:
-            repo.finish_run(run, RunStatus.timeout, error=str(exc))
-            repo.mark_job_finished(job, JobStatus.failed, str(exc))
-            return {"job_id": job.id, "status": "failed", "error": str(exc)}
+            except (GitHubRateLimitError, WikidataRateLimitError) as exc:
+                partial_sources += 1
+                source_errors.append(f"{source.name}: {exc}")
+                repo.finish_run(
+                    run,
+                    RunStatus.rate_limited,
+                    error=str(exc),
+                )
 
-        except httpx.HTTPStatusError as exc:
-            status = exc.response.status_code if exc.response is not None else None
-            repo.finish_run(run, RunStatus.failed, http_status=status, error=str(exc))
-            repo.mark_job_finished(job, JobStatus.failed, str(exc))
-            return {"job_id": job.id, "status": "failed", "error": str(exc)}
+            except httpx.TimeoutException as exc:
+                failed_sources += 1
+                source_errors.append(f"{source.name}: {exc}")
+                repo.finish_run(
+                    run,
+                    RunStatus.timeout,
+                    error=str(exc),
+                )
 
-        except Exception as exc:
-            repo.finish_run(run, RunStatus.failed, error=str(exc))
-            repo.mark_job_finished(job, JobStatus.failed, str(exc))
-            raise
+            except httpx.HTTPStatusError as exc:
+                failed_sources += 1
+                status = exc.response.status_code if exc.response is not None else None
+                source_errors.append(f"{source.name}: {exc}")
+                repo.finish_run(
+                    run,
+                    RunStatus.failed,
+                    http_status=status,
+                    error=str(exc),
+                )
+
+            except Exception as exc:
+                failed_sources += 1
+                source_errors.append(f"{source.name}: {exc}")
+                repo.finish_run(
+                    run,
+                    RunStatus.failed,
+                    error=str(exc),
+                )
+
+        if successful_sources == len(sources):
+            final_status = JobStatus.completed
+            error = None
+        elif successful_sources > 0:
+            final_status = JobStatus.partial
+            error = "; ".join(source_errors)
+        else:
+            final_status = JobStatus.failed
+            error = "; ".join(source_errors)
+
+        repo.mark_job_finished(job, final_status, error)
+        return {
+            "job_id": job.id,
+            "status": final_status.value,
+            "findings": total_findings,
+            "successful_sources": successful_sources,
+            "partial_sources": partial_sources,
+            "failed_sources": failed_sources,
+            "errors": source_errors,
+        }

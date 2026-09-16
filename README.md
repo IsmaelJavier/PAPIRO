@@ -56,3 +56,12 @@ Los tests HTTP utilizan `MockTransport` únicamente para validar lógica determi
 ## Próximo incremento
 
 Solo cuando este flujo sea estable: entrada `username` → búsqueda directa del perfil → reutilización del mismo modelo `Finding`/`Indicator`. Después: iteración, correlación, Elasticsearch y Neo4j.
+
+## Wikidata source
+
+The person-name ingestion now queries two independent public sources:
+
+- GitHub (`github_person_search`)
+- Wikidata (`wikidata_person_search`)
+
+The Wikidata module uses the public Wikibase Action API (`wbsearchentities` followed by `wbgetentities`) and stores each returned entity as a canonical finding. It exposes the Wikidata Q-ID and available English/Spanish Wikipedia sitelinks as indicators. As with GitHub, evidence strength is not an identity probability; identity and relevance remain investigator assessments.
