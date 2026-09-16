@@ -1,44 +1,63 @@
 services:
   postgres:
     image: postgres:16-alpine
+    network_mode: host
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-osint}
-      POSTGRES_USER: ${POSTGRES_USER:-osint}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-osint}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-osint} -d ${POSTGRES_DB:-osint}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      POSTGRES_DB: kami_eye
+      POSTGRES_USER: kami
+      POSTGRES_PASSWORD: kami_dev_password
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U kami -d kami_eye"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    network_mode: host
+    command: redis-server --bind 127.0.0.1 --port 6379
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "-p", "6379", "ping"]
+      interval: 3s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
 
   api:
-    build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    env_file: .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
+    command: uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://kami:kami_dev_password@127.0.0.1:5432/kami_eye
+      REDIS_URL: redis://127.0.0.1:6379/0
     volumes:
       - .:/app
-    ports:
-      - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
 
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
     command: celery -A app.worker.celery_app worker --loglevel=INFO
-    env_file: .env
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://kami:kami_dev_password@127.0.0.1:5432/kami_eye
+      REDIS_URL: redis://127.0.0.1:6379/0
     volumes:
       - .:/app
     depends_on:
@@ -46,6 +65,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:
