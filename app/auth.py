@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field
 from pwdlib import PasswordHash
-from pwdlib.exceptions import VerifyMismatchError
 from sqlalchemy import select
 
 from app.config import settings
@@ -55,7 +54,7 @@ def _secret() -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return password_hash.verify(plain_password, hashed_password)
-    except (VerifyMismatchError, ValueError, TypeError):
+    except Exception:
         return False
 
 
