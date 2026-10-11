@@ -165,18 +165,20 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
                 raise HTTPException(status_code=404, detail="Investigation not found")
             if job.owner_user_id is None:
                 raise HTTPException(status_code=404, detail="Investigation not found")
-            if job.owner_user_id == actor.id:
-                if method != "GET" and actor.global_role == UserRole.user:
-                    raise HTTPException(status_code=403, detail="This account is read-only")
-                return
             if job.organization_id:
                 membership = session.scalar(select(OrganizationMembership).where(
                     OrganizationMembership.organization_id == job.organization_id,
                     OrganizationMembership.user_id == actor.id,
                     OrganizationMembership.is_active.is_(True),
                 ))
-                if membership and membership.role == MembershipRole.entity and method == "GET":
-                    return
+                if membership and membership.role == MembershipRole.entity:
+                    if method == "GET":
+                        return
+                    raise HTTPException(status_code=403, detail="Entity managers cannot modify investigation content")
+            if job.owner_user_id == actor.id:
+                if method != "GET" and actor.global_role == UserRole.user:
+                    raise HTTPException(status_code=403, detail="This account is read-only")
+                return
             raise HTTPException(status_code=404, detail="Investigation not found")
 
         # All other API routes require an authenticated investigator. The
