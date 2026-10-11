@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     github_max_candidates: int = 5
     wikidata_max_candidates: int = 5
     http_timeout_seconds: float = 15.0
+    auth_secret_key: str | None = None
+    auth_token_ttl_minutes: int = 30
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
