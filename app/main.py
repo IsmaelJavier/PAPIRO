@@ -20,6 +20,13 @@ app.include_router(organization_router)
 app.include_router(router)
 
 
+@app.get("/", include_in_schema=False)
+@app.get("/ui", include_in_schema=False)
+def access_ui():
+    """Serve the authentication and personal investigation landing page."""
+    return FileResponse("/app/app/static/index.html")
+
+
 @app.get("/ui/job/{job_id}", include_in_schema=False)
 @app.get("/ui/graph/{job_id}", include_in_schema=False)
 def investigator_ui(job_id: str):
