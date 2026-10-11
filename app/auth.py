@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, EmailStr, Field, constr
+from pydantic import BaseModel, EmailStr, Field
 from pwdlib import PasswordHash
 from sqlalchemy import select
 
@@ -128,10 +128,12 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
         # Organization membership management is a separate capability: entity
         # managers can administer membership, but not investigation content.
         if path == "/api/v1/organizations" and method == "POST":
-            if actor.global_role not in (UserRole.investigator, UserRole.user):
+            if actor.global_role != UserRole.investigator:
                 raise HTTPException(status_code=403, detail="Forbidden")
             return
-        if "organization_id" in params and path.endswith("/members"):
+        if path.startswith("/api/v1/admin/"):
+            raise HTTPException(status_code=403, detail="Superuser role required")
+        if "organization_id" in params:
             org_id = params["organization_id"]
             membership = session.scalar(select(OrganizationMembership).where(
                 OrganizationMembership.organization_id == org_id,
