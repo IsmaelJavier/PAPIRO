@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from app.auth import authorize_api_request
 from sqlalchemy import func, select
 
 from app.db import db_session
@@ -27,7 +29,7 @@ from app.schemas import (
 from app.tasks import process_person_name_job, process_manual_person_name_search
 
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(authorize_api_request)])
 
 
 def correlation_to_response(
@@ -138,6 +140,7 @@ def relationship_to_response(row: Relationship) -> RelationshipResponse:
 )
 def ingest_name(
     payload: IngestNameRequest,
+    request: Request,
 ):
     value = " ".join(
         payload.name.split()
@@ -156,6 +159,7 @@ def ingest_name(
             value,
             "person_name",
         )
+        job.owner_user_id = request.state.current_user_id
 
         job_id = job.id
 
