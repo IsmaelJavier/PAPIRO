@@ -307,3 +307,35 @@ def remove_organization_member(organization_id: str, user_id: str):
         if membership.user_id == membership.organization.created_by_user_id:
             raise HTTPException(status_code=409, detail="Transfer organization ownership before removing its creator")
         membership.is_active = False
+
+
+class MembershipRoleUpdateRequest(BaseModel):
+    role: str
+
+
+@organization_router.patch("/{organization_id}/members/{user_id}")
+def update_organization_member_role(
+    organization_id: str, user_id: str, payload: MembershipRoleUpdateRequest
+):
+    if payload.role not in {item.value for item in MembershipRole}:
+        raise HTTPException(status_code=422, detail="Invalid membership role")
+    with db_session() as session:
+        membership = session.scalar(select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.is_active.is_(True),
+        ))
+        if not membership:
+            raise HTTPException(status_code=404, detail="Active membership not found")
+        if membership.role == MembershipRole.entity and payload.role != MembershipRole.entity:
+            other_entity = session.scalar(select(OrganizationMembership.id).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.is_active.is_(True),
+                OrganizationMembership.role == MembershipRole.entity,
+                OrganizationMembership.user_id != user_id,
+            ))
+            if not other_entity:
+                raise HTTPException(status_code=409, detail="An organization must retain at least one active entity manager")
+        membership.role = MembershipRole(payload.role)
+        session.flush()
+        return {"user_id": membership.user_id, "role": membership.role.value}
