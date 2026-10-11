@@ -19,6 +19,20 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Check inline JavaScript syntax in UI pages
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          for html_path in sorted(Path("app/static").glob("*.html")):
+              html = html_path.read_text(encoding="utf-8")
+              scripts = [s for s in re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>', html, flags=re.I | re.S) if s.strip()]
+              for index, script in enumerate(scripts):
+                  output = Path("/tmp") / f"{html_path.stem}-{index}.js"
+                  output.write_text(script, encoding="utf-8")
+                  print(f"Checking {html_path} inline script {index}")
+          PY
+          for script in /tmp/index-*.js /tmp/graph-*.js; do node --check "$script"; done
       - name: Run tests
         env:
           AUTH_SECRET_KEY: "test-only-secret-key-at-least-32-characters"
