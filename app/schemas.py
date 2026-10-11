@@ -16,6 +16,7 @@ class IngestNameRequest(BaseModel):
         min_length=2,
         max_length=200,
     )
+    organization_id: str | None = None
 
 
 class JobCreatedResponse(BaseModel):
