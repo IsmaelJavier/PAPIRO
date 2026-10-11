@@ -256,15 +256,18 @@ La rama `feature/identity-authorization` introduce la base de identidad y autori
 - `superuser` tiene acceso administrativo global.
 - Las cuentas no se crean mediante registro público.
 
-### Configuración inicial
+### Configuración inicial local
 
 1. Copia `.env.example` a `.env`.
 2. Establece `AUTH_SECRET_KEY` con un secreto aleatorio de al menos 32 caracteres; no uses el valor de ejemplo.
-3. Haz una copia de seguridad de PostgreSQL y aplica la migración 004 después de las migraciones 002 y 003.
-4. Instala las dependencias actualizadas y reinicia API/worker.
-5. Crea el primer administrador de forma interactiva: `python -m scripts.bootstrap_superuser`.
-6. Inicia sesión con `POST /api/v1/auth/login` (JSON con `email` y `password`) y envía el token como `Authorization: Bearer <access_token>`.
-7. Crea cuentas adicionales como superusuario con `POST /api/v1/admin/users`; las contraseñas deben tener al menos 12 caracteres.
+3. Arranca los servicios con `docker compose up --build -d`.
+4. Haz una copia de seguridad de PostgreSQL y confirma que las migraciones 002 y 003 están aplicadas.
+5. Aplica la migración 004: `docker compose exec api python -m scripts.apply_identity_migration`.
+6. Crea el primer administrador de forma interactiva: `docker compose exec -it api python -m scripts.bootstrap_superuser`.
+7. Abre `http://127.0.0.1:8000/docs`, inicia sesión en `POST /api/v1/auth/login` con JSON `email` y `password`, y envía el token como `Authorization: Bearer <access_token>`.
+8. Crea cuentas adicionales como superusuario con `POST /api/v1/admin/users`; las contraseñas deben tener al menos 12 caracteres.
+
+No borres el volumen de PostgreSQL para resolver errores de migración. Los trabajos históricos sin propietario no se asignan automáticamente.
 
 ### Organizaciones
 
@@ -281,5 +284,5 @@ La migración 004 deja `jobs.owner_user_id` nullable de manera intencional. Los 
 ### Importante antes de producción
 
 - La interfaz del grafo incluye un formulario básico de inicio/cierre de sesión y envía el bearer token a la API. El token se almacena en `localStorage`; antes de producción conviene valorar una cookie `HttpOnly` y añadir protección contra fuerza bruta.
-- No se han ejecutado pruebas de integración ni una migración contra una base real desde esta sesión. Validar en una copia de la base antes de desplegar.
+- CI ejecuta pruebas unitarias y una prueba de humo de la migración sobre PostgreSQL limpio, incluida una segunda ejecución para comprobar idempotencia. Aún no se ha probado contra la base real de la instalación; haz copia de seguridad antes de aplicarla.
 - Se eliminó `.env` del árbol de la rama y se añadió `.env.example`; el historial Git anterior aún puede conservar versiones del archivo. Si contenía credenciales reales, rótalas y sanea el historial antes de hacer pública o compartir la rama.
