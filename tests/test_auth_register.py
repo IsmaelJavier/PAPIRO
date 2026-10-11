@@ -31,7 +31,7 @@ def test_register_creates_investigator_and_returns_access_token(monkeypatch):
     client = TestClient(app)
 
     response = client.post("/api/v1/auth/register", json={
-        "email": "New.Investigator@example.test",
+        "email": "New.Investigator@example.com",
         "password": "a-strong-password-123",
     })
     assert response.status_code == 201
@@ -40,18 +40,18 @@ def test_register_creates_investigator_and_returns_access_token(monkeypatch):
     assert body["token_type"] == "bearer"
     assert body["expires_in"] > 0
     user = session.query(User).one()
-    assert user.email == "new.investigator@example.test"
+    assert user.email == "new.investigator@example.com"
     assert user.global_role == UserRole.investigator
     assert user.password_hash != "a-strong-password-123"
 
     duplicate = client.post("/api/v1/auth/register", json={
-        "email": "new.investigator@example.test",
+        "email": "new.investigator@example.com",
         "password": "another-strong-password-123",
     })
     assert duplicate.status_code == 409
 
     short_password = client.post("/api/v1/auth/register", json={
-        "email": "short@example.test",
+        "email": "short@example.com",
         "password": "short",
     })
     assert short_password.status_code == 422
