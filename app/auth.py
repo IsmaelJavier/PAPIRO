@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field
 from pwdlib import PasswordHash
+from pwdlib.exceptions import VerifyMismatchError
 from sqlalchemy import select
 
 from app.config import settings
@@ -50,7 +51,7 @@ def _secret() -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return password_hash.verify(plain_password, hashed_password)
-    except (ValueError, TypeError):
+    except (VerifyMismatchError, ValueError, TypeError):
         return False
 
 
@@ -140,7 +141,7 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
                 OrganizationMembership.user_id == actor.id,
                 OrganizationMembership.is_active.is_(True),
             ))
-            if method in ("GET", "POST", "DELETE") and membership and membership.role == MembershipRole.entity:
+            if method in ("GET", "POST", "DELETE", "PATCH") and membership and membership.role == MembershipRole.entity:
                 return
             raise HTTPException(status_code=403, detail="Only the organization's entity manager may manage memberships")
 
