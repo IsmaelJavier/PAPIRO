@@ -4,7 +4,7 @@ from app.auth import authorize_api_request
 from sqlalchemy import func, select
 
 from app.db import db_session
-from app.models import Correlation, Entity, Finding, Relationship
+from app.models import Correlation, Entity, Finding, MembershipRole, OrganizationMembership, Relationship
 from app.repository import Repository
 from app.schemas import (
     CorrelationAssessmentRequest,
@@ -155,11 +155,21 @@ def ingest_name(
     with db_session() as session:
         repo = Repository(session)
 
+        organization_id = payload.organization_id
+        if organization_id:
+            membership = session.scalar(select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.user_id == request.state.current_user_id,
+                OrganizationMembership.is_active.is_(True),
+            ))
+            if not membership or membership.role != MembershipRole.investigator:
+                raise HTTPException(status_code=403, detail="Active investigator membership required to create an organizational investigation")
         job = repo.create_job(
             value,
             "person_name",
         )
         job.owner_user_id = request.state.current_user_id
+        job.organization_id = organization_id
 
         job_id = job.id
 
