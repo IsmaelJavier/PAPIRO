@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, constr
 from pwdlib import PasswordHash
 from sqlalchemy import select
 
@@ -180,3 +180,127 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
         # handler still has to scope creation to the current user/organization.
         if actor.global_role == UserRole.user and method != "GET":
             raise HTTPException(status_code=403, detail="This account is read-only")
+
+
+class AdminUserCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=1024)
+    global_role: str = "investigator"
+
+
+class OrganizationCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=200)
+    slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+class MembershipCreateRequest(BaseModel):
+    email: EmailStr
+    role: str = "investigator"
+
+
+admin_router = APIRouter(
+    prefix="/api/v1/admin",
+    tags=["administration"],
+    dependencies=[Depends(authorize_api_request)],
+)
+organization_router = APIRouter(
+    prefix="/api/v1/organizations",
+    tags=["organizations"],
+    dependencies=[Depends(authorize_api_request)],
+)
+
+
+@admin_router.post("/users", response_model=UserResponse, status_code=201)
+def admin_create_user(payload: AdminUserCreateRequest, request: Request):
+    # The central dependency guarantees only superusers can pass admin paths.
+    role = payload.global_role
+    if role not in {item.value for item in UserRole}:
+        raise HTTPException(status_code=422, detail="Invalid global role")
+    email = str(payload.email).lower()
+    with db_session() as session:
+        if session.scalar(select(User).where(User.email == email)):
+            raise HTTPException(status_code=409, detail="Email already registered")
+        user = User(email=email, password_hash=hash_password(payload.password), global_role=UserRole(role))
+        session.add(user)
+        session.flush()
+        return UserResponse(id=user.id, email=user.email, global_role=user.global_role.value, is_active=user.is_active)
+
+
+@organization_router.post("", status_code=201)
+def create_organization(payload: OrganizationCreateRequest, request: Request):
+    creator_id = request.state.current_user_id
+    with db_session() as session:
+        if session.scalar(select(Organization).where(Organization.slug == payload.slug)):
+            raise HTTPException(status_code=409, detail="Organization slug already exists")
+        org = Organization(name=payload.name.strip(), slug=payload.slug, created_by_user_id=creator_id)
+        session.add(org)
+        session.flush()
+        # Creator initially manages membership. They can add investigators who
+        # own and edit their own organizational investigations.
+        membership = OrganizationMembership(
+            organization_id=org.id, user_id=creator_id, role=MembershipRole.entity
+        )
+        session.add(membership)
+        session.flush()
+        return {"id": org.id, "name": org.name, "slug": org.slug, "role": membership.role.value}
+
+
+@organization_router.get("/{organization_id}/members")
+def list_organization_members(organization_id: str):
+    with db_session() as session:
+        org = session.get(Organization, organization_id)
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        rows = session.scalars(select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.is_active.is_(True),
+        )).all()
+        return [
+            {"user_id": row.user_id, "email": row.user.email, "role": row.role.value}
+            for row in rows
+        ]
+
+
+@organization_router.post("/{organization_id}/members", status_code=201)
+def add_organization_member(organization_id: str, payload: MembershipCreateRequest):
+    if payload.role not in {item.value for item in MembershipRole}:
+        raise HTTPException(status_code=422, detail="Invalid membership role")
+    email = str(payload.email).lower()
+    with db_session() as session:
+        org = session.get(Organization, organization_id)
+        if not org or not org.is_active:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        user = session.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
+        if not user:
+            raise HTTPException(status_code=404, detail="Active user not found; an administrator must create the account first")
+        existing = session.scalar(select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user.id,
+        ))
+        if existing:
+            if existing.is_active:
+                raise HTTPException(status_code=409, detail="User is already a member")
+            existing.is_active = True
+            existing.role = MembershipRole(payload.role)
+            session.flush()
+            return {"user_id": user.id, "email": user.email, "role": existing.role.value}
+        membership = OrganizationMembership(
+            organization_id=organization_id, user_id=user.id, role=MembershipRole(payload.role)
+        )
+        session.add(membership)
+        session.flush()
+        return {"user_id": user.id, "email": user.email, "role": membership.role.value}
+
+
+@organization_router.delete("/{organization_id}/members/{user_id}", status_code=204)
+def remove_organization_member(organization_id: str, user_id: str):
+    with db_session() as session:
+        membership = session.scalar(select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == user_id,
+        ))
+        if not membership:
+            raise HTTPException(status_code=404, detail="Membership not found")
+        if membership.user_id == membership.organization.created_by_user_id:
+            raise HTTPException(status_code=409, detail="Transfer organization ownership before removing its creator")
+        membership.is_active = False
