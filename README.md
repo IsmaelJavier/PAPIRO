@@ -264,8 +264,8 @@ La rama `feature/identity-authorization` introduce la base de identidad y autori
 4. Haz una copia de seguridad de PostgreSQL y confirma que las migraciones 002 y 003 están aplicadas.
 5. Aplica la migración 004: `docker compose exec api python -m scripts.apply_identity_migration`.
 6. Crea el primer administrador de forma interactiva: `docker compose exec -it api python -m scripts.bootstrap_superuser`.
-7. Abre `http://127.0.0.1:8000/docs`, inicia sesión en `POST /api/v1/auth/login` con JSON `email` y `password`, y envía el token como `Authorization: Bearer <access_token>`.
-8. Crea cuentas adicionales como superusuario con `POST /api/v1/admin/users`; las contraseñas deben tener al menos 12 caracteres.
+7. Abre `http://127.0.0.1:8000/ui` para usar el panel web de inicio de sesión/registro y crear una investigación personal. También puedes abrir `http://127.0.0.1:8000/docs` para usar la API interactiva.
+8. Las cuentas también pueden crearse desde el panel web. Para cuentas administrativas o asignaciones de organización, utiliza los endpoints de administración con una cuenta autorizada; las contraseñas deben tener al menos 12 caracteres.
 
 No borres el volumen de PostgreSQL para resolver errores de migración. Los trabajos históricos sin propietario no se asignan automáticamente.
 
