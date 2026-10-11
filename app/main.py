@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
 from app.api import router
+from app.auth import admin_router, auth_router, organization_router
 from app.db import Base, engine
 
 
@@ -13,6 +14,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="OSINT MVP", version="0.1.0", lifespan=lifespan)
+app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(organization_router)
 app.include_router(router)
 
 
