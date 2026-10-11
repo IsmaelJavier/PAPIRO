@@ -280,6 +280,6 @@ La migración 004 deja `jobs.owner_user_id` nullable de manera intencional. Los 
 
 ### Importante antes de producción
 
-- La autenticación de la API está protegida por bearer token; la interfaz web del grafo todavía necesita integrar el flujo de inicio de sesión para usarla directamente desde el navegador.
+- La interfaz del grafo incluye un formulario básico de inicio/cierre de sesión y envía el bearer token a la API. El token se almacena en `localStorage`; antes de producción conviene valorar una cookie `HttpOnly` y añadir protección contra fuerza bruta.
 - No se han ejecutado pruebas de integración ni una migración contra una base real desde esta sesión. Validar en una copia de la base antes de desplegar.
 - Se eliminó `.env` del árbol de la rama y se añadió `.env.example`; el historial Git anterior aún puede conservar versiones del archivo. Si contenía credenciales reales, rótalas y sanea el historial antes de hacer pública o compartir la rama.
