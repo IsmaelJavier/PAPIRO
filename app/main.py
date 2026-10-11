@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
@@ -24,14 +25,14 @@ app.include_router(router)
 @app.get("/ui", include_in_schema=False)
 def access_ui():
     """Serve the authentication and personal investigation landing page."""
-    return FileResponse("/app/app/static/index.html")
+    return FileResponse(Path(__file__).resolve().parent / "static" / "index.html")
 
 
 @app.get("/ui/job/{job_id}", include_in_schema=False)
 @app.get("/ui/graph/{job_id}", include_in_schema=False)
 def investigator_ui(job_id: str):
     """Serve the investigator workspace for an OSINT job."""
-    return FileResponse("/app/app/static/graph.html")
+    return FileResponse(Path(__file__).resolve().parent / "static" / "graph.html")
 
 
 @app.get("/health")
