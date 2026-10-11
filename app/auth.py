@@ -40,7 +40,11 @@ class UserResponse(BaseModel):
 
 
 def _secret() -> str:
-    if not settings.auth_secret_key or len(settings.auth_secret_key) < 32:
+    if (
+        not settings.auth_secret_key
+        or len(settings.auth_secret_key) < 32
+        or settings.auth_secret_key.startswith("replace-with-")
+    ):
         raise HTTPException(
             status_code=503,
             detail="Authentication is not configured: set AUTH_SECRET_KEY to a random secret of at least 32 characters.",
