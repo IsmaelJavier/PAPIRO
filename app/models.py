@@ -122,10 +122,10 @@ class Job(Base):
     )
     input_value: Mapped[str] = mapped_column(Text, nullable=False)
     owner_user_id: Mapped[str | None] = mapped_column(
-        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+        ForeignKey("users.id", ondelete="RESTRICT", name="fk_jobs_owner_user"), nullable=True, index=True
     )
     organization_id: Mapped[str | None] = mapped_column(
-        ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=True, index=True
+        ForeignKey("organizations.id", ondelete="RESTRICT", name="fk_jobs_organization"), nullable=True, index=True
     )
     input_type: Mapped[str] = mapped_column(
         String(64),
