@@ -24,3 +24,42 @@ jobs:
           AUTH_SECRET_KEY: "test-only-secret-key-at-least-32-characters"
           DATABASE_URL: "sqlite+pysqlite:///:memory:"
         run: pytest -q
+
+  migration-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kami
+          POSTGRES_PASSWORD: migration-test-password
+          POSTGRES_DB: kami_eye
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kami -d kami_eye"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Create legacy jobs table and fixture
+        env:
+          PGPASSWORD: migration-test-password
+        run: |
+          psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -c "CREATE TABLE jobs (id VARCHAR(36) PRIMARY KEY);"
+          psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -c "INSERT INTO jobs (id) VALUES ('legacy-job');"
+      - name: Apply identity migration twice
+        env:
+          PGPASSWORD: migration-test-password
+        run: |
+          psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -f migrations/004_identity_and_authorization.sql
+          psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -f migrations/004_identity_and_authorization.sql
+      - name: Verify migration schema and legacy data preservation
+        env:
+          PGPASSWORD: migration-test-password
+        run: |
+          psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -c "SELECT owner_user_id, organization_id FROM jobs WHERE id = 'legacy-job';"
+          test "$(psql -h 127.0.0.1 -U kami -d kami_eye -tAc "SELECT count(*) FROM jobs WHERE id = 'legacy-job'")" = "1"
+          test "$(psql -h 127.0.0.1 -U kami -d kami_eye -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('users','organizations','organization_memberships')")" = "3"
