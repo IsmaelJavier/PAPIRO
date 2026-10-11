@@ -226,18 +226,30 @@
   </div>
 </div>
 
-<div class="modal-backdrop" id="loginModal">
+<div class="modal-backdrop" id="loginModal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
   <div class="modal">
-    <header><h2>Iniciar sesión</h2><button class="btn small" id="closeLoginBtn">Cerrar</button></header>
-    <form id="loginForm">
-      <div class="modal-body">
-        <p class="notice">Usa una cuenta creada por el administrador. No existe registro público.</p>
-        <div class="field"><label for="loginEmail">Correo</label><input id="loginEmail" type="email" autocomplete="username" required></div>
-        <div class="field"><label for="loginPassword">Contraseña</label><input id="loginPassword" type="password" autocomplete="current-password" required></div>
-        <p class="error" id="loginError" role="alert"></p>
+    <header><h2 id="authTitle">Iniciar sesión</h2><button class="btn small" type="button" id="closeLoginBtn">Cerrar</button></header>
+    <div class="modal-body">
+      <div class="toolbar" role="tablist" aria-label="Acceso a Kami-no-Eye" style="margin-bottom:14px">
+        <button class="btn primary" type="button" id="showLoginTab" role="tab" aria-selected="true">Iniciar sesión</button>
+        <button class="btn" type="button" id="showRegisterTab" role="tab" aria-selected="false">Crear cuenta</button>
       </div>
-      <div class="modal-footer"><button class="btn primary" type="submit" id="loginSubmitBtn">Entrar</button></div>
-    </form>
+      <form id="loginForm">
+        <p class="notice">Accede a tu espacio de investigación con tu correo y contraseña.</p>
+        <div class="field"><label for="loginEmail">Correo electrónico</label><input id="loginEmail" type="email" autocomplete="username" required maxlength="320></div>
+        <div class="field"><label for="loginPassword">Contraseña</label><input id="loginPassword" type="password" autocomplete="current-password" required maxlength="1024"></div>
+        <p class="error" id="loginError" role="alert" aria-live="polite"></p>
+        <div class="modal-footer"><button class="btn primary" type="submit" id="loginSubmitBtn">Entrar</button></div>
+      </form>
+      <form id="registerForm" hidden>
+        <p class="notice">Crea una cuenta de investigador. La contraseña debe tener al menos 12 caracteres. Las cuentas nuevas comienzan con investigaciones personales; el acceso a organizaciones requiere invitación de un administrador de esa organización.</p>
+        <div class="field"><label for="registerEmail">Correo electrónico</label><input id="registerEmail" type="email" autocomplete="email" required maxlength="320"></div>
+        <div class="field"><label for="registerPassword">Contraseña (mínimo 12 caracteres)</label><input id="registerPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="1024"></div>
+        <div class="field"><label for="registerPasswordConfirm">Confirmar contraseña</label><input id="registerPasswordConfirm" type="password" autocomplete="new-password" required minlength="12" maxlength="1024"></div>
+        <p class="error" id="registerError" role="alert" aria-live="polite"></p>
+        <div class="modal-footer"><button class="btn primary" type="submit" id="registerSubmitBtn">Crear cuenta</button></div>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -291,6 +303,42 @@ async function submitLogin(event){
     if(!response.ok) throw new Error(data?.detail || `HTTP ${response.status}`);
     localStorage.setItem(TOKEN_KEY,data.access_token);
     document.getElementById('loginPassword').value='';
+    closeModal('loginModal'); updateAuthButton(); await loadAll();
+  }catch(e){error.textContent=e.message;}
+  finally{button.disabled=false;}
+}
+
+function showAuthTab(tab){
+  const login = tab === 'login';
+  document.getElementById('loginForm').hidden = !login;
+  document.getElementById('registerForm').hidden = login;
+  document.getElementById('authTitle').textContent = login ? 'Iniciar sesión' : 'Crear cuenta';
+  document.getElementById('showLoginTab').classList.toggle('primary', login);
+  document.getElementById('showRegisterTab').classList.toggle('primary', !login);
+  document.getElementById('showLoginTab').setAttribute('aria-selected', String(login));
+  document.getElementById('showRegisterTab').setAttribute('aria-selected', String(!login));
+  document.getElementById(login ? 'registerError' : 'loginError').textContent = '';
+}
+async function submitRegister(event){
+  event.preventDefault();
+  const button = document.getElementById('registerSubmitBtn');
+  const error = document.getElementById('registerError');
+  const password = document.getElementById('registerPassword').value;
+  const confirmation = document.getElementById('registerPasswordConfirm').value;
+  error.textContent = '';
+  if(password.length < 12){ error.textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+  if(password !== confirmation){ error.textContent = 'Las contraseñas no coinciden.'; return; }
+  button.disabled = true;
+  try{
+    const response = await fetch(`${API}/auth/register`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:document.getElementById('registerEmail').value.trim(),password})
+    });
+    let data = null; try{data=await response.json()}catch{}
+    if(!response.ok) throw new Error(data?.detail || `HTTP ${response.status}`);
+    localStorage.setItem(TOKEN_KEY,data.access_token);
+    document.getElementById('registerPassword').value='';
+    document.getElementById('registerPasswordConfirm').value='';
     closeModal('loginModal'); updateAuthButton(); await loadAll();
   }catch(e){error.textContent=e.message;}
   finally{button.disabled=false;}
@@ -505,7 +553,10 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
    else openModal('loginModal');
  };
  document.getElementById('closeLoginBtn').onclick=()=>closeModal('loginModal');
+ document.getElementById('showLoginTab').onclick=()=>showAuthTab('login');
+ document.getElementById('showRegisterTab').onclick=()=>showAuthTab('register');
  document.getElementById('loginForm').addEventListener('submit',submitLogin);
+ document.getElementById('registerForm').addEventListener('submit',submitRegister);
  updateAuthButton();
 loadAll(true);
 </script>
