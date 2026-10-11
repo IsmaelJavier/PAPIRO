@@ -240,3 +240,46 @@ La interfaz `/ui/job/{JOB_ID}` incorpora ahora:
 - Nueva búsqueda de persona contra las fuentes configuradas mediante `POST /api/v1/jobs/{job_id}/search/name`; los findings nuevos se incorporan a la investigación y, cuando corresponde, se recalculan las correlaciones deterministas.
 
 Las posiciones y nodos ocultos son preferencias locales del navegador en esta iteración; no modifican la evidencia ni eliminan datos. La persistencia server-side de la vista podrá añadirse posteriormente.
+
+
+## Identidad y autorización (incremento en revisión)
+
+La rama `feature/identity-authorization` introduce la base de identidad y autorización sin modificar la lógica de recolección OSINT, normalización, correlación ni reconstrucción del grafo.
+
+### Política
+
+- Cada investigación nueva tiene un usuario responsable.
+- Una investigación personal no tiene `organization_id`; una investigación organizativa tiene usuario responsable y organización.
+- Los investigadores pueden leer y modificar sus propias investigaciones.
+- El rol organizativo `entity` puede leer las investigaciones de su organización y gestionar membresías, pero no modificar el contenido de las investigaciones ni lanzar búsquedas.
+- Los investigadores de una organización no ven por defecto las investigaciones de otros investigadores.
+- `superuser` tiene acceso administrativo global.
+- Las cuentas no se crean mediante registro público.
+
+### Configuración inicial
+
+1. Copia `.env.example` a `.env`.
+2. Establece `AUTH_SECRET_KEY` con un secreto aleatorio de al menos 32 caracteres; no uses el valor de ejemplo.
+3. Haz una copia de seguridad de PostgreSQL y aplica la migración 004 después de las migraciones 002 y 003.
+4. Instala las dependencias actualizadas y reinicia API/worker.
+5. Crea el primer administrador de forma interactiva: `python -m scripts.bootstrap_superuser`.
+6. Inicia sesión con `POST /api/v1/auth/login` (JSON con `email` y `password`) y envía el token como `Authorization: Bearer <access_token>`.
+7. Crea cuentas adicionales como superusuario con `POST /api/v1/admin/users`; las contraseñas deben tener al menos 12 caracteres.
+
+### Organizaciones
+
+- `POST /api/v1/organizations`: crear organización. El creador comienza como gestor de membresías (`entity`).
+- `GET /api/v1/organizations/{organization_id}/members`: listar miembros.
+- `POST /api/v1/organizations/{organization_id}/members`: añadir un usuario ya existente con rol `entity` o `investigator`.
+- `DELETE /api/v1/organizations/{organization_id}/members/{user_id}`: desactivar una membresía, sin borrar el usuario ni sus investigaciones.
+- Para crear una investigación organizativa, enviar `organization_id` en `POST /api/v1/ingest/name`; el usuario debe tener membresía activa con rol `investigator`.
+
+### Migración de datos existentes
+
+La migración 004 deja `jobs.owner_user_id` nullable de manera intencional. Los trabajos históricos no se asignan automáticamente al primer administrador porque eso inventaría una autoría. Hasta su reasignación auditada, no estarán disponibles para usuarios normales. No elimines el volumen de PostgreSQL. La política y la secuencia de transición están documentadas en `docs/identity-authorization.md`.
+
+### Importante antes de producción
+
+- La autenticación de la API está protegida por bearer token; la interfaz web del grafo todavía necesita integrar el flujo de inicio de sesión para usarla directamente desde el navegador.
+- No se han ejecutado pruebas de integración ni una migración contra una base real desde esta sesión. Validar en una copia de la base antes de desplegar.
+- Se eliminó `.env` del árbol de la rama y se añadió `.env.example`; el historial Git anterior aún puede conservar versiones del archivo. Si contenía credenciales reales, rótalas y sanea el historial antes de hacer pública o compartir la rama.
