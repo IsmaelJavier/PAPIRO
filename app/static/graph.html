@@ -96,6 +96,7 @@
     </div>
     <div class="header-actions">
       <a id="docsLink" href="/docs" target="_blank" rel="noopener">API</a>
+      <button id="authBtn">Iniciar sesión</button>
       <button id="reloadBtn">Actualizar</button>
     </div>
   </header>
@@ -225,6 +226,21 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="loginModal">
+  <div class="modal">
+    <header><h2>Iniciar sesión</h2><button class="btn small" id="closeLoginBtn">Cerrar</button></header>
+    <form id="loginForm">
+      <div class="modal-body">
+        <p class="notice">Usa una cuenta creada por el administrador. No existe registro público.</p>
+        <div class="field"><label for="loginEmail">Correo</label><input id="loginEmail" type="email" autocomplete="username" required></div>
+        <div class="field"><label for="loginPassword">Contraseña</label><input id="loginPassword" type="password" autocomplete="current-password" required></div>
+        <p class="error" id="loginError" role="alert"></p>
+      </div>
+      <div class="modal-footer"><button class="btn primary" type="submit" id="loginSubmitBtn">Entrar</button></div>
+    </form>
+  </div>
+</div>
+
 <script>
 const jobId = location.pathname.split('/').filter(Boolean).pop();
 const API = `/api/v1`;
@@ -240,11 +256,44 @@ const relevanceText = { indeterminado:'Indeterminada', relevante:'Relevante', no
 const assessmentText = { indeterminado:'Indeterminada', confirmada:'Confirmada', descartada:'Descartada' };
 function closeModal(id){ document.getElementById(id).style.display='none'; }
 function openModal(id){ document.getElementById(id).style.display='flex'; }
+const TOKEN_KEY = 'kami:access-token';
+function updateAuthButton(){
+  const btn = document.getElementById('authBtn');
+  if(btn) btn.textContent = localStorage.getItem(TOKEN_KEY) ? 'Cerrar sesión' : 'Iniciar sesión';
+}
 async function api(path, options={}) {
-  const r = await fetch(`${API}${path}`, { headers:{'Content-Type':'application/json', ...(options.headers||{})}, ...options });
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers = {'Content-Type':'application/json', ...(options.headers||{})};
+  if(token) headers.Authorization = `Bearer ${token}`;
+  const r = await fetch(`${API}${path}`, { ...options, headers });
   let data = null; try { data = await r.json(); } catch {}
+  if(r.status === 401 && token){
+    localStorage.removeItem(TOKEN_KEY);
+    updateAuthButton();
+  }
   if (!r.ok) throw new Error(data?.detail || `HTTP ${r.status}`);
   return data;
+}
+async function submitLogin(event){
+  event.preventDefault();
+  const button = document.getElementById('loginSubmitBtn');
+  const error = document.getElementById('loginError');
+  button.disabled = true; error.textContent = '';
+  try{
+    const response = await fetch(`${API}/auth/login`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        email:document.getElementById('loginEmail').value.trim(),
+        password:document.getElementById('loginPassword').value
+      })
+    });
+    let data = null; try{data=await response.json()}catch{}
+    if(!response.ok) throw new Error(data?.detail || `HTTP ${response.status}`);
+    localStorage.setItem(TOKEN_KEY,data.access_token);
+    document.getElementById('loginPassword').value='';
+    closeModal('loginModal'); updateAuthButton(); await loadAll();
+  }catch(e){error.textContent=e.message;}
+  finally{button.disabled=false;}
 }
 function badge(text, cls=''){ return `<span class="badge ${cls}">${esc(text)}</span>`; }
 function findingById(id){ return findings.find(f=>f.id===id); }
@@ -451,6 +500,13 @@ document.getElementById('showMemberships').onchange=applyGraphFilters;
 document.getElementById('fitBtn').onclick=()=>cy?.fit(cy.elements(':visible'),50);
 document.getElementById('resetGraphBtn').onclick=()=>{hiddenNodeIds.clear();persistHidden();document.getElementById('nodeTypeFilter').value='all';document.getElementById('sourceFilter').value='all';document.getElementById('findingSearch').value='';renderFindings();applyGraphFilters();cy?.fit(cy.elements(':visible'),50);};
 document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElementById('showHiddenBtn').onclick=showAllHidden;document.getElementById('selectVisible').onclick=selectVisible;document.getElementById('clearSelection').onclick=clearSelection;document.getElementById('createEntityBtn').onclick=openEntityModal;document.getElementById('saveEntityBtn').onclick=saveEntity;document.getElementById('saveEntityEditBtn').onclick=saveEntityEdit;document.getElementById('saveRelationshipBtn').onclick=saveRelationship;document.getElementById('saveRelationshipEditBtn').onclick=saveRelationshipEdit;document.getElementById('manualSearchBtn').onclick=runManualSearch;document.getElementById('manualSearch').addEventListener('keydown',e=>{if(e.key==='Enter')runManualSearch();});document.getElementById('reloadBtn').onclick=()=>loadAll(true);
+ document.getElementById('authBtn').onclick=()=>{
+   if(localStorage.getItem(TOKEN_KEY)){localStorage.removeItem(TOKEN_KEY);updateAuthButton();loadAll();}
+   else openModal('loginModal');
+ };
+ document.getElementById('closeLoginBtn').onclick=()=>closeModal('loginModal');
+ document.getElementById('loginForm').addEventListener('submit',submitLogin);
+ updateAuthButton();
 loadAll(true);
 </script>
 </body>
