@@ -50,6 +50,68 @@ class RelevanceAssessment(str, enum.Enum):
     not_relevant = "no_relevante"
 
 
+class UserRole(str, enum.Enum):
+    superuser = "superuser"
+    investigator = "investigator"
+    user = "user"
+
+
+class MembershipRole(str, enum.Enum):
+    entity = "entity"
+    investigator = "investigator"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    global_role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, native_enum=False, length=32,
+             values_callable=lambda cls: [item.value for item in cls]),
+        nullable=False, default=UserRole.investigator,
+    )
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    memberships = orm_relationship("OrganizationMembership", back_populates="user", cascade="all, delete-orphan")
+    owned_jobs = orm_relationship("Job", back_populates="owner")
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    memberships = orm_relationship("OrganizationMembership", back_populates="organization", cascade="all, delete-orphan")
+    jobs = orm_relationship("Job", back_populates="organization")
+
+
+class OrganizationMembership(Base):
+    __tablename__ = "organization_memberships"
+    __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_organization_membership"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role: Mapped[MembershipRole] = mapped_column(
+        Enum(MembershipRole, native_enum=False, length=32,
+             values_callable=lambda cls: [item.value for item in cls]),
+        nullable=False, default=MembershipRole.investigator,
+    )
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    user = orm_relationship("User", back_populates="memberships")
+    organization = orm_relationship("Organization", back_populates="memberships")
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
@@ -59,6 +121,12 @@ class Job(Base):
         default=lambda: str(uuid.uuid4()),
     )
     input_value: Mapped[str] = mapped_column(Text, nullable=False)
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     input_type: Mapped[str] = mapped_column(
         String(64),
         nullable=False,
@@ -84,6 +152,9 @@ class Job(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+
+    owner = orm_relationship("User", back_populates="owned_jobs")
+    organization = orm_relationship("Organization", back_populates="jobs")
 
     findings = orm_relationship(
         "Finding",
