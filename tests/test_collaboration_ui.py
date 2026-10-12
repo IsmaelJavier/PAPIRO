@@ -181,6 +181,7 @@ def test_entity_organization_requires_administrative_provisioning(monkeypatch):
 
 def test_administrative_entity_provisioning_binds_verified_manager_and_identifier(monkeypatch):
     from contextlib import contextmanager
+    from fastapi import Request
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
@@ -199,9 +200,14 @@ def test_administrative_entity_provisioning_binds_verified_manager_and_identifie
     manager = User(
         email="manager@institution.example",
         password_hash="test",
-        global_role=UserRole.investigator,
+        global_role=UserRole.entity,
     )
-    session.add(manager)
+    administrator = User(
+        email="admin-provisioner@example.com",
+        password_hash="test",
+        global_role=UserRole.superuser,
+    )
+    session.add_all([manager, administrator])
     session.flush()
 
     @contextmanager
@@ -214,23 +220,41 @@ def test_administrative_entity_provisioning_binds_verified_manager_and_identifie
         slug="instituto-investigacion-001",
         manager_email="manager@institution.example",
     )
-    result = auth.admin_create_organization(payload)
-    organization = session.scalar(
-        select(Organization).where(Organization.slug == "instituto-investigacion-001")
-    )
-    membership = session.scalar(
-        select(OrganizationMembership).where(
-            OrganizationMembership.organization_id == organization.id,
-            OrganizationMembership.user_id == manager.id,
+    request = Request({
+        "type": "http",
+        "method": "POST",
+        "path": "/api/v1/admin/organizations",
+        "headers": [],
+        "query_string": b"",
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+        "scheme": "http",
+        "path_params": {},
+        "root_path": "",
+    })
+    request.state.current_user_id = administrator.id
+    try:
+        result = auth.admin_create_organization(payload, request)
+        organization = session.scalar(
+            select(Organization).where(Organization.slug == "instituto-investigacion-001")
         )
-    )
-    assert result["entity_identifier"] == "instituto-investigacion-001"
-    assert result["manager_email"] == manager.email
-    assert membership is not None
-    assert membership.role == MembershipRole.entity
-    session.close()
-    engine.dispose()
-
+        membership = session.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == organization.id,
+                OrganizationMembership.user_id == manager.id,
+            )
+        )
+        assert result["entity_identifier"] == "instituto-investigacion-001"
+        assert result["manager_email"] == manager.email
+        assert organization.contact_email == manager.email
+        assert organization.verified_at is not None
+        assert organization.verified_by_user_id == administrator.id
+        assert organization.created_by_user_id == administrator.id
+        assert membership is not None
+        assert membership.role == MembershipRole.entity
+    finally:
+        session.close()
+        engine.dispose()
 
 def test_entity_provisioning_is_admin_only_and_exposed_in_admin_workspace():
     from app.main import app
