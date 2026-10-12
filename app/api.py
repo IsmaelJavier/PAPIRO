@@ -215,6 +215,12 @@ def _require_investigator_job(session, job_id, user_id):
         return job
     if job.owner_user_id == user_id:
         return job
+    shared_copy = session.scalar(select(InvestigationShare).where(
+        InvestigationShare.shared_job_id == job_id,
+        InvestigationShare.owner_user_id == user_id,
+    ))
+    if shared_copy:
+        return job
     if job.organization_id:
         membership = session.scalar(select(OrganizationMembership).where(
             OrganizationMembership.organization_id == job.organization_id,
