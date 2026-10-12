@@ -565,14 +565,68 @@ document.getElementById('resetGraphBtn').onclick=()=>{hiddenNodeIds.clear();pers
 document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElementById('showHiddenBtn').onclick=showAllHidden;document.getElementById('selectVisible').onclick=selectVisible;document.getElementById('clearSelection').onclick=clearSelection;document.getElementById('createEntityBtn').onclick=openEntityModal;document.getElementById('saveEntityBtn').onclick=saveEntity;document.getElementById('saveEntityEditBtn').onclick=saveEntityEdit;document.getElementById('saveRelationshipBtn').onclick=saveRelationship;document.getElementById('saveRelationshipEditBtn').onclick=saveRelationshipEdit;document.getElementById('manualSearchBtn').onclick=runManualSearch;document.getElementById('manualSearch').addEventListener('keydown',e=>{if(e.key==='Enter')runManualSearch();});document.getElementById('reloadBtn').onclick=()=>loadAll(true);
  document.addEventListener('DOMContentLoaded',()=>{
   const sessionModal=document.getElementById('sessionModal');
+  const baselineKey=`kami:session-baseline:${jobId}`;
+  const hiddenKey=`kami:hidden:${jobId}`;
+  let checkpointReady=false;
+  let exitInProgress=false;
   const openSessionModal=()=>{sessionModal.style.display='flex';};
-  const closeSessionModal=()=>{sessionModal.style.display='none';};
+  const closeSessionModal=()=>{if(!exitInProgress)sessionModal.style.display='none';};
   const saveView=()=>{if(cy)savePositions();persistHidden();};
-  const clearView=()=>{localStorage.removeItem(positionKey);localStorage.removeItem(`kami:hidden:${jobId}`);};
-  const leaveToWorkspace=()=>{saveView();location.href='/ui/workspace';};
-  const leaveWithoutSaving=()=>{clearView();location.href='/ui/workspace';};
-  const logoutAndClearView=()=>{clearView();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');};
-  const saveAndLogout=()=>{saveView();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');};
+  const rememberLocalBaseline=()=>{
+    if(!localStorage.getItem(baselineKey)){
+      localStorage.setItem(baselineKey,JSON.stringify({
+        positions:localStorage.getItem(positionKey),
+        hidden:localStorage.getItem(hiddenKey)
+      }));
+    }
+  };
+  const restoreLocalBaseline=()=>{
+    let baseline=null;
+    try{baseline=JSON.parse(localStorage.getItem(baselineKey)||'null');}catch{}
+    if(baseline){
+      if(baseline.positions===null)localStorage.removeItem(positionKey);else localStorage.setItem(positionKey,baseline.positions);
+      if(baseline.hidden===null)localStorage.removeItem(hiddenKey);else localStorage.setItem(hiddenKey,baseline.hidden);
+      try{hiddenNodeIds=new Set(JSON.parse(localStorage.getItem(hiddenKey)||'[]'));}catch{hiddenNodeIds=new Set();}
+    }
+    localStorage.removeItem(baselineKey);
+  };
+  const closeCheckpoint=async()=>{
+    await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/commit`,{method:'POST'});
+    localStorage.removeItem(baselineKey);
+  };
+  const leaveToWorkspace=async()=>{
+    if(exitInProgress)return;exitInProgress=true;
+    try{saveView();await closeCheckpoint();location.href='/ui/workspace';}
+    catch(e){exitInProgress=false;alert(`No se pudieron confirmar los cambios. La sesión sigue abierta. ${e.message}`);}
+  };
+  const leaveWithoutSaving=async()=>{
+    if(exitInProgress)return;exitInProgress=true;
+    try{
+      await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
+      restoreLocalBaseline();
+      location.href='/ui/workspace';
+    }catch(e){exitInProgress=false;alert(`No se pudo descartar la sesión. No abandones la investigación hasta resolver el error. ${e.message}`);}
+  };
+  const logoutAndClearView=async()=>{
+    if(exitInProgress)return;exitInProgress=true;
+    try{
+      await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
+      restoreLocalBaseline();
+      localStorage.removeItem(TOKEN_KEY);location.replace('/ui');
+    }catch(e){exitInProgress=false;alert(`No se pudo descartar la sesión ni cerrar sesión. ${e.message}`);}
+  };
+  const saveAndLogout=async()=>{
+    if(exitInProgress)return;exitInProgress=true;
+    try{saveView();await closeCheckpoint();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');}
+    catch(e){exitInProgress=false;alert(`No se pudieron guardar los cambios. La sesión sigue abierta. ${e.message}`);}
+  };
+  window.beginInvestigationEditingSession=async()=>{
+    if(checkpointReady)return;
+    const checkpoint=await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint`,{method:'POST'});
+    rememberLocalBaseline();
+    checkpointReady=true;
+    return checkpoint;
+  };
   document.getElementById('authBtn').onclick=openSessionModal;
   document.getElementById('cancelSessionExit').onclick=closeSessionModal;
   document.getElementById('leaveWithoutSaving').onclick=leaveWithoutSaving;
@@ -603,6 +657,7 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
      if(!token){location.replace('/ui');return;}
      try{
        await api('/auth/me');
+       await beginInvestigationEditingSession();
        await loadAll(true);
      }catch(error){
        localStorage.removeItem(TOKEN_KEY);
@@ -613,8 +668,8 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
 </script>
 <div class="session-modal-backdrop" id="sessionModal" role="dialog" aria-modal="true" aria-labelledby="sessionModalTitle">
   <div class="session-modal"><h2 id="sessionModalTitle">¿Cómo deseas salir?</h2>
-    <p>Las modificaciones de datos (hallazgos evaluados, entidades y relaciones) se guardan en el servidor al confirmar cada operación. La posición de los nodos y los elementos ocultos se guardan automáticamente en este navegador.</p>
-    <p>Si eliges salir sin guardar, se descartará únicamente la vista local del grafo; los cambios de datos ya confirmados en el servidor permanecerán guardados.</p>
+    <p>Los cambios de datos se guardan automáticamente mientras trabajas. Al abrir la investigación se crea un punto de restauración con los datos y la vista que existían al inicio de la sesión.</p>
+    <p><b>Salir sin guardar</b> revierte los cambios de esta sesión. <b>Guardar y salir</b> conserva los cambios. <b>Cancelar</b> vuelve a la investigación sin modificar nada.</p>
     <div class="session-modal-actions"><button class="btn" type="button" id="cancelSessionExit">Cancelar</button><button class="btn danger" type="button" id="leaveWithoutSaving">Salir sin guardar</button><button class="btn primary" type="button" id="saveAndLeave">Guardar y salir</button><button class="btn danger-fill" type="button" id="logoutWithoutViewSave">Cerrar sesión sin guardar</button><button class="btn primary" type="button" id="saveAndLogout">Guardar y cerrar sesión</button></div>
   </div>
 </div></body>
