@@ -570,7 +570,8 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   let checkpointReady=false;
   let exitInProgress=false;
   const openSessionModal=()=>{sessionModal.style.display='flex';};
-  const closeSessionModal=()=>{if(!exitInProgress)sessionModal.style.display='none';};
+  const setExitProgress=message=>{const status=document.getElementById('exitProgress');if(status){status.textContent=message||'';status.hidden=!message;}};
+  const closeSessionModal=()=>{if(!exitInProgress){setExitProgress('');sessionModal.style.display='none';}};
   const saveView=()=>{if(cy)savePositions();persistHidden();};
   const rememberLocalBaseline=(checkpointId)=>{
     let existing=null;
@@ -597,30 +598,30 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
     localStorage.removeItem(baselineKey);
   };
   const leaveToWorkspace=async()=>{
-    if(exitInProgress)return;exitInProgress=true;
+    if(exitInProgress)return;exitInProgress=true;setExitProgress('Confirmando los cambios guardados…');
     try{saveView();await closeCheckpoint();location.href='/ui/workspace';}
-    catch(e){exitInProgress=false;alert(`No se pudieron confirmar los cambios. La sesión sigue abierta. ${e.message}`);}
+    catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudieron confirmar los cambios. La sesión sigue abierta. ${e.message}`);}
   };
   const leaveWithoutSaving=async()=>{
-    if(exitInProgress)return;exitInProgress=true;
+    if(exitInProgress)return;exitInProgress=true;setExitProgress('Restaurando el estado inicial… si hay una búsqueda en curso, puede tardar hasta que termine.');
     try{
       await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
       restoreLocalBaseline();
       location.href='/ui/workspace';
-    }catch(e){exitInProgress=false;alert(`No se pudo descartar la sesión. No abandones la investigación hasta resolver el error. ${e.message}`);}
+    }catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudo descartar la sesión. No abandones la investigación hasta resolver el error. ${e.message}`);}
   };
   const logoutAndClearView=async()=>{
-    if(exitInProgress)return;exitInProgress=true;
+    if(exitInProgress)return;exitInProgress=true;setExitProgress('Restaurando el estado inicial antes de cerrar sesión…');
     try{
       await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
       restoreLocalBaseline();
       localStorage.removeItem(TOKEN_KEY);location.replace('/ui');
-    }catch(e){exitInProgress=false;alert(`No se pudo descartar la sesión ni cerrar sesión. ${e.message}`);}
+    }catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudo descartar la sesión ni cerrar sesión. ${e.message}`);}
   };
   const saveAndLogout=async()=>{
-    if(exitInProgress)return;exitInProgress=true;
+    if(exitInProgress)return;exitInProgress=true;setExitProgress('Confirmando los cambios antes de cerrar sesión…');
     try{saveView();await closeCheckpoint();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');}
-    catch(e){exitInProgress=false;alert(`No se pudieron guardar los cambios. La sesión sigue abierta. ${e.message}`);}
+    catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudieron guardar los cambios. La sesión sigue abierta. ${e.message}`);}
   };
   window.beginInvestigationEditingSession=async()=>{
     if(checkpointReady)return;
@@ -676,6 +677,7 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   <div class="session-modal"><h2 id="sessionModalTitle">¿Cómo deseas salir?</h2>
     <p>Los cambios de datos se guardan automáticamente mientras trabajas. Al abrir la investigación se crea un punto de restauración con los datos y la vista que existían al inicio de la sesión.</p>
     <p><b>Salir sin guardar</b> revierte los cambios de esta sesión. <b>Guardar y salir</b> conserva los cambios. <b>Cancelar</b> vuelve a la investigación sin modificar nada.</p>
+    <p id="exitProgress" role="status" hidden></p>
     <div class="session-modal-actions"><button class="btn" type="button" id="cancelSessionExit">Cancelar</button><button class="btn danger" type="button" id="leaveWithoutSaving">Salir sin guardar</button><button class="btn primary" type="button" id="saveAndLeave">Guardar y salir</button><button class="btn danger-fill" type="button" id="logoutWithoutViewSave">Cerrar sesión sin guardar</button><button class="btn primary" type="button" id="saveAndLogout">Guardar y cerrar sesión</button></div>
   </div>
 </div></body>
