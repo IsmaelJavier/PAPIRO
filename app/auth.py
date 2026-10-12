@@ -12,7 +12,7 @@ from app.config import settings
 from app.db import db_session
 from app.models import (
     Correlation, Entity, Finding, Job, MembershipRole, Organization,
-    OrganizationMembership, Relationship, User, UserRole,
+    OrganizationMembership, Relationship, User, UserRole, InvestigationShare,
 )
 
 auth_router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
@@ -213,6 +213,9 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
             if job.owner_user_id == actor.id:
                 if method != "GET" and actor.global_role == UserRole.user:
                     raise HTTPException(status_code=403, detail="This account is read-only")
+                shared_copy = session.scalar(select(InvestigationShare).where(InvestigationShare.shared_job_id == job.id))
+                if shared_copy and method != "GET" and shared_copy.permission != "edit":
+                    raise HTTPException(status_code=403, detail="This shared copy does not grant editing permission")
                 return
             raise HTTPException(status_code=404, detail="Investigation not found")
 
