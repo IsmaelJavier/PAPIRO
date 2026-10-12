@@ -11,7 +11,15 @@ from app.api import (
     _restore_investigation_snapshot,
 )
 from app.db import Base
+from app.main import app
 from app.models import Entity, Job, JobStatus
+
+
+def test_checkpoint_endpoints_are_registered():
+    paths = app.openapi()["paths"]
+    assert "/api/v1/jobs/{job_id}/checkpoint" in paths
+    assert "/api/v1/jobs/{job_id}/checkpoint/commit" in paths
+    assert "/api/v1/jobs/{job_id}/checkpoint/restore" in paths
 
 
 def test_investigation_snapshot_table_order_respects_foreign_keys():
