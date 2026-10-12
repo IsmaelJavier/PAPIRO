@@ -740,7 +740,15 @@ def merge_shared_investigation(job_id: str, share_id: str, request: Request):
         original.investigation_title = shared_job.investigation_title
         original.notes = shared_job.notes
         original.input_value = shared_job.input_value
-        return {"job_id": job_id, "share_id": share_id, "status": "merged"}
+        session.flush()
+        # Advance the collaboration baseline so the same share can be merged again
+        # after further collaborator edits, while still detecting concurrent changes.
+        share.base_snapshot = _make_investigation_snapshot(session, job_id)
+        share.id_map = {
+            table_name: {original_id: copy_id for copy_id, original_id in mapping.items()}
+            for table_name, mapping in target_ids.items()
+        }
+        return {"job_id": job_id, "share_id": share_id, "status": "merged", "baseline_advanced": True}
 
 
 @router.post("/jobs/{job_id}/checkpoint")
