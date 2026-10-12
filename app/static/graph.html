@@ -279,9 +279,10 @@ async function api(path, options={}) {
   if(token) headers.Authorization = `Bearer ${token}`;
   const r = await fetch(`${API}${path}`, { ...options, headers });
   let data = null; try { data = await r.json(); } catch {}
-  if(r.status === 401 && token){
+  if(r.status === 401){
     localStorage.removeItem(TOKEN_KEY);
     updateAuthButton();
+    location.replace('/ui');
   }
   if (!r.ok) throw new Error(data?.detail || `HTTP ${r.status}`);
   return data;
@@ -549,8 +550,8 @@ document.getElementById('fitBtn').onclick=()=>cy?.fit(cy.elements(':visible'),50
 document.getElementById('resetGraphBtn').onclick=()=>{hiddenNodeIds.clear();persistHidden();document.getElementById('nodeTypeFilter').value='all';document.getElementById('sourceFilter').value='all';document.getElementById('findingSearch').value='';renderFindings();applyGraphFilters();cy?.fit(cy.elements(':visible'),50);};
 document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElementById('showHiddenBtn').onclick=showAllHidden;document.getElementById('selectVisible').onclick=selectVisible;document.getElementById('clearSelection').onclick=clearSelection;document.getElementById('createEntityBtn').onclick=openEntityModal;document.getElementById('saveEntityBtn').onclick=saveEntity;document.getElementById('saveEntityEditBtn').onclick=saveEntityEdit;document.getElementById('saveRelationshipBtn').onclick=saveRelationship;document.getElementById('saveRelationshipEditBtn').onclick=saveRelationshipEdit;document.getElementById('manualSearchBtn').onclick=runManualSearch;document.getElementById('manualSearch').addEventListener('keydown',e=>{if(e.key==='Enter')runManualSearch();});document.getElementById('reloadBtn').onclick=()=>loadAll(true);
  document.getElementById('authBtn').onclick=()=>{
-   if(localStorage.getItem(TOKEN_KEY)){localStorage.removeItem(TOKEN_KEY);updateAuthButton();loadAll();}
-   else openModal('loginModal');
+   localStorage.removeItem(TOKEN_KEY);
+   location.replace('/ui');
  };
  document.getElementById('closeLoginBtn').onclick=()=>closeModal('loginModal');
  document.getElementById('showLoginTab').onclick=()=>showAuthTab('login');
@@ -558,7 +559,17 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
  document.getElementById('loginForm').addEventListener('submit',submitLogin);
  document.getElementById('registerForm').addEventListener('submit',submitRegister);
  updateAuthButton();
-loadAll(true);
+ (async()=>{
+   const token=localStorage.getItem(TOKEN_KEY);
+   if(!token){location.replace('/ui');return;}
+   try{
+     await api('/auth/me');
+     await loadAll(true);
+   }catch(error){
+     localStorage.removeItem(TOKEN_KEY);
+     location.replace('/ui');
+   }
+ })();
 </script>
 </body>
 </html>
