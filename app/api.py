@@ -454,21 +454,24 @@ def list_jobs(request: Request):
     user_id = request.state.current_user_id
 
     with db_session() as session:
-        entity_organization_ids = select(OrganizationMembership.organization_id).where(
-            OrganizationMembership.user_id == user_id,
-            OrganizationMembership.is_active.is_(True),
-            OrganizationMembership.role == MembershipRole.entity,
-        )
-        jobs = session.scalars(
-            select(Job)
-            .where(
-                or_(
-                    Job.owner_user_id == user_id,
-                    Job.organization_id.in_(entity_organization_ids),
-                )
+        actor = session.get(User, user_id)
+        job_query = select(Job).order_by(Job.created_at.desc())
+        if actor and actor.global_role == UserRole.superuser:
+            jobs = session.scalars(job_query).all()
+        else:
+            entity_organization_ids = select(OrganizationMembership.organization_id).where(
+                OrganizationMembership.user_id == user_id,
+                OrganizationMembership.is_active.is_(True),
+                OrganizationMembership.role == MembershipRole.entity,
             )
-            .order_by(Job.created_at.desc())
-        ).all()
+            jobs = session.scalars(
+                job_query.where(
+                    or_(
+                        Job.owner_user_id == user_id,
+                        Job.organization_id.in_(entity_organization_ids),
+                    )
+                )
+            ).all()
 
         result = []
         for job in jobs:
