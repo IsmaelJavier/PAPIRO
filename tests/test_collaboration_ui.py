@@ -274,6 +274,9 @@ def test_entity_provisioning_is_admin_only_and_exposed_in_admin_workspace():
     assert 'id="adminCreateOrganizationForm"' in workspace.text
     assert 'id="adminOrganizationIdentifier"' in workspace.text
     assert 'id="adminOrganizationEmail"' in workspace.text
+    assert 'value="entity"' in workspace.text
+    assert 'id="entityManagementPanel"' in workspace.text
+    assert 'loadEntityManagement' in workspace.text
     assert "/admin/organizations" in workspace.text
 
 
