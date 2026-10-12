@@ -1,11 +1,5 @@
 <!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <title>Kami-no-Eye · Acceso</title>
-  <style>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>Kami-no-Eye · Acceso</title><style>
     :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#172033;background:#f4f6fb;font-synthesis:none}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;grid-template-rows:auto 1fr auto}
     header{background:#101827;color:#fff;padding:18px clamp(18px,5vw,64px);display:flex;align-items:center;justify-content:space-between;gap:16px}
@@ -23,163 +17,26 @@
     .full{width:100%}.secondary{margin-top:8px}.footer{padding:18px;text-align:center;font-size:12px;color:#788399}\n    .workspace-actions{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.workspace-actions button{flex:1;min-width:140px}.job-list{display:grid;gap:10px;margin:16px 0}.job-card{border:1px solid #dce2ec;border-radius:10px;padding:14px;background:#fbfcff}.job-card h3{font-size:15px;margin:0 0 7px;overflow-wrap:anywhere}.job-card p{font-size:12px;margin:4px 0}.job-card a{color:#2457d6;font-weight:700}.job-meta{display:flex;gap:8px;flex-wrap:wrap;color:#58647a;font-size:12px}.empty-state{padding:18px;border:1px dashed #cbd4e2;border-radius:10px;text-align:center;color:#58647a;font-size:13px}.section-heading{font-size:16px;margin:24px 0 8px}
     #workspace[hidden]{display:none!important}
     @media(max-width:720px){main{grid-template-columns:1fr;gap:20px}.intro{padding:8px 2px}header{align-items:flex-start;flex-direction:column}}
-  </style>
-</head>
-<body>
-<header><div><strong>Kami-no-Eye</strong><span>Reconstrucción de huellas digitales · OSINT</span></div><span id="headerStatus">Espacio personal de investigación</span></header>
+  
+body{display:block;min-height:100vh}main{min-height:calc(100vh - 130px)}[hidden]{display:none!important}
+</style></head><body>
+<header><div><strong>Kami-no-Eye</strong><span>Plataforma de investigación OSINT</span></div><div><span id="headerStatus">Espacio personal de investigación</span></div></header>
 <main>
-  <section class="intro">
-    <div class="eyebrow">Investigación OSINT</div>
-    <h1>Conecta la evidencia. Comprende el contexto.</h1>
-    <p>Accede a tu espacio de investigación para recolectar resultados de las fuentes configuradas, revisar indicadores, correlacionar evidencia y construir perfiles candidatos de forma guiada.</p>
-    <div class="notice">Las conclusiones son hipótesis de trabajo: revisa la procedencia y la evidencia antes de confirmar una identidad o relación.</div>
-  </section>
-  <section class="card" aria-label="Acceso a Kami-no-Eye">
-    <div id="authPanel">
-      <div class="tabs" role="tablist" aria-label="Autenticación">
-        <button class="primary" type="button" id="loginTab" role="tab" aria-selected="true">Iniciar sesión</button>
-        <button type="button" id="registerTab" role="tab" aria-selected="false">Crear cuenta</button>
-      </div>
-      <form id="loginForm">
-        <div class="field"><label for="loginEmail">Correo electrónico</label><input id="loginEmail" type="email" autocomplete="username" maxlength="320" required></div>
-        <div class="field"><label for="loginPassword">Contraseña</label><input id="loginPassword" type="password" autocomplete="current-password" maxlength="1024" required></div>
-        <p class="error" id="loginError" role="alert" aria-live="polite"></p>
-        <button class="primary full" type="submit" id="loginButton">Entrar</button>
-      </form>
-      <form id="registerForm" hidden>
-        <p class="notice">Crea una cuenta de investigador. La contraseña debe tener al menos 12 caracteres. Las investigaciones nuevas serán personales; el acceso a organizaciones requiere que un administrador te añada.</p>
-        <div class="field"><label for="registerEmail">Correo electrónico</label><input id="registerEmail" type="email" autocomplete="email" maxlength="320" required></div>
-        <div class="field"><label for="registerPassword">Contraseña (mínimo 12 caracteres)</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></div>
-        <div class="field"><label for="registerConfirm">Confirmar contraseña</label><input id="registerConfirm" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></div>
-        <p class="error" id="registerError" role="alert" aria-live="polite"></p>
-        <button class="primary full" type="submit" id="registerButton">Crear cuenta</button>
-      </form>
-    </div>
-    <section id="workspace" hidden>
-      <h2>Tu espacio de trabajo</h2>
-      <p id="welcome"></p>
-      <div class="workspace-actions">
-        <button class="primary" type="button" id="newInvestigationButton">+ Nueva investigación</button>
-        <button type="button" id="refreshInvestigationsButton">Actualizar lista</button>
-      </div>
-      <h3 class="section-heading">Mis investigaciones</h3>
-      <p id="investigationsStatus" role="status" aria-live="polite">Cargando investigaciones…</p>
-      <div class="job-list" id="investigationList"></div>
-      <form id="investigationForm" hidden>
-        <h3 class="section-heading">Crear investigación</h3>
-        <div class="field"><label for="personName">Persona que deseas investigar</label><input id="personName" maxlength="500" placeholder="Ej.: Ada Lovelace" required></div>
-        <p class="error" id="investigationError" role="alert" aria-live="polite"></p>
-        <button class="primary full" type="submit" id="createInvestigationButton">Crear investigación y comenzar</button>
-        <button class="full secondary" type="button" id="cancelInvestigationButton">Cancelar</button>
-      </form>
-      <button class="full secondary" type="button" id="logoutButton">Cerrar sesión</button>
-    </section>
-  </section>
-</main>
-<div class="footer">Kami-no-Eye · MVP · Usa únicamente datos y fuentes para los que tengas autorización.</div>
+<section class="intro"><div class="eyebrow">Investigación OSINT</div><h1>Conecta la evidencia. Comprende el contexto.</h1><p>Accede a tu cuenta para abrir tu espacio de trabajo, revisar investigaciones anteriores o iniciar una nueva cuando lo necesites.</p><div class="notice">Crear una investigación no es necesario para entrar al espacio de trabajo. Las conclusiones son hipótesis de trabajo: revisa la procedencia y la evidencia antes de confirmar una identidad o relación.</div></section>
+<section class="card" aria-label="Acceso a Kami-no-Eye"><div id="authPanel">
+<div class="tabs" role="tablist" aria-label="Autenticación"><button class="primary" type="button" id="loginTab" role="tab" aria-selected="true">Iniciar sesión</button><button type="button" id="registerTab" role="tab" aria-selected="false">Crear cuenta</button></div>
+<form id="loginForm"><div class="field"><label for="loginEmail">Correo electrónico</label><input id="loginEmail" type="email" autocomplete="username" maxlength="320" required></div><div class="field"><label for="loginPassword">Contraseña</label><input id="loginPassword" type="password" autocomplete="current-password" maxlength="1024" required></div><p class="error" id="loginError" role="alert" aria-live="polite"></p><button class="primary full" type="submit" id="loginButton">Entrar a mi espacio de trabajo</button></form>
+<form id="registerForm" hidden><p class="notice">Crea una cuenta de investigador. La contraseña debe tener al menos 12 caracteres. El acceso a organizaciones requiere que un administrador te añada.</p><div class="field"><label for="registerEmail">Correo electrónico</label><input id="registerEmail" type="email" autocomplete="email" maxlength="320" required></div><div class="field"><label for="registerPassword">Contraseña (mínimo 12 caracteres)</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></div><div class="field"><label for="registerConfirm">Confirmar contraseña</label><input id="registerConfirm" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></div><p class="error" id="registerError" role="alert" aria-live="polite"></p><button class="primary full" type="submit" id="registerButton">Crear cuenta y entrar</button></form>
+</div><p class="error" id="sessionError" role="alert" aria-live="polite"></p></section>
+</main><div class="footer">Kami-no-Eye · Usa únicamente datos y fuentes para los que tengas autorización.</div>
 <script>
-const API='/api/v1';
-const TOKEN_KEY='kami:access-token';
-const $=id=>document.getElementById(id);
+const API='/api/v1',TOKEN_KEY='kami:access-token',$=id=>document.getElementById(id);
 function token(){return localStorage.getItem(TOKEN_KEY)}
-function setTab(tab){
-  const login=tab==='login';
-  $('loginForm').hidden=!login;$('registerForm').hidden=login;
-  $('loginTab').classList.toggle('primary',login);$('registerTab').classList.toggle('primary',!login);
-  $('loginTab').setAttribute('aria-selected',String(login));$('registerTab').setAttribute('aria-selected',String(!login));
-  $('loginError').textContent='';$('registerError').textContent='';
-}
-async function request(path,options={}){
-  const headers={'Content-Type':'application/json',...(options.headers||{})};
-  if(token())headers.Authorization='Bearer '+token();
-  const response=await fetch(API+path,{...options,headers});
-  let data=null;try{data=await response.json()}catch{}
-  if(!response.ok)throw new Error(data?.detail||'Error HTTP '+response.status);
-  return data;
-}
-function showWorkspace(user){
-  $('authPanel').hidden=true;$('workspace').hidden=false;
-  $('welcome').textContent='Sesión iniciada como '+user.email+'. Desde aquí puedes retomar una investigación o iniciar una nueva cuando lo necesites.';
-  $('headerStatus').textContent='Sesión activa';
-  $('investigationForm').hidden=true;
-  loadInvestigations();
-}
-function escapeHtml(value){
-  return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-}
-function formatDate(value){
-  if(!value)return 'Fecha desconocida';
-  const date=new Date(value);
-  return Number.isNaN(date.getTime())?'Fecha desconocida':date.toLocaleString();
-}
-async function loadInvestigations(){
-  const list=$('investigationList'),status=$('investigationsStatus');
-  status.textContent='Cargando investigaciones…';list.innerHTML='';
-  try{
-    const jobs=await request('/jobs');
-    if(!jobs.length){
-      status.textContent='';
-      list.innerHTML='<div class="empty-state">Todavía no tienes investigaciones. Puedes crear una cuando quieras; no es necesario hacerlo para entrar a tu espacio de trabajo.</div>';
-      return;
-    }
-    status.textContent=jobs.length+' investigación'+(jobs.length===1?'':'es');
-    list.innerHTML=jobs.map(job=>`<article class="job-card">
-      <h3>${escapeHtml(job.input_value)}</h3>
-      <div class="job-meta"><span>Estado: ${escapeHtml(job.status)}</span><span>Creada: ${escapeHtml(formatDate(job.created_at))}</span></div>
-      <p>${Number(job.finding_count)||0} hallazgos · ${Number(job.correlation_count)||0} correlaciones</p>
-      <a href="/ui/job/${encodeURIComponent(job.id)}">Abrir investigación →</a>
-    </article>`).join('');
-  }catch(error){
-    status.textContent='No se pudieron cargar las investigaciones.';
-    list.innerHTML='<div class="empty-state">'+escapeHtml(error.message)+'<br>Comprueba tu sesión e inténtalo de nuevo.</div>';
-    if(/401|expired|Invalid or expired/i.test(error.message)){localStorage.removeItem(TOKEN_KEY);showAuth();setTab('login')}
-  }
-}
-function showAuth(){
-  $('authPanel').hidden=false;$('workspace').hidden=true;$('headerStatus').textContent='Espacio personal de investigación';
-}
-async function establishSession(data){
-  localStorage.setItem(TOKEN_KEY,data.access_token);
-  const user=await request('/auth/me');
-  showWorkspace(user);
-}
-$('loginTab').onclick=()=>setTab('login');
-$('registerTab').onclick=()=>setTab('register');
-$('loginForm').addEventListener('submit',async event=>{
-  event.preventDefault();const button=$('loginButton');button.disabled=true;$('loginError').textContent='';
-  try{
-    const data=await request('/auth/login',{method:'POST',headers:{},body:JSON.stringify({email:$('loginEmail').value.trim(),password:$('loginPassword').value})});
-    await establishSession(data);$('loginPassword').value='';
-  }catch(error){localStorage.removeItem(TOKEN_KEY);$('loginError').textContent=error.message}
-  finally{button.disabled=false}
-});
-$('registerForm').addEventListener('submit',async event=>{
-  event.preventDefault();const button=$('registerButton');button.disabled=true;$('registerError').textContent='';
-  const password=$('registerPassword').value;
-  if(password.length<12){$('registerError').textContent='La contraseña debe tener al menos 12 caracteres.';button.disabled=false;return}
-  if(password!==$('registerConfirm').value){$('registerError').textContent='Las contraseñas no coinciden.';button.disabled=false;return}
-  try{
-    const data=await request('/auth/register',{method:'POST',body:JSON.stringify({email:$('registerEmail').value.trim(),password})});
-    await establishSession(data);$('registerPassword').value='';$('registerConfirm').value='';
-  }catch(error){$('registerError').textContent=error.message}
-  finally{button.disabled=false}
-});
-$('investigationForm').addEventListener('submit',async event=>{
-  event.preventDefault();const button=$('createInvestigationButton');button.disabled=true;$('investigationError').textContent='';
-  const name=$('personName').value.trim();
-  if(name.length<2){$('investigationError').textContent='Escribe al menos dos caracteres.';button.disabled=false;return}
-  try{const result=await request('/ingest/name',{method:'POST',body:JSON.stringify({name})});location.href='/ui/job/'+encodeURIComponent(result.job_id)}
-  catch(error){$('investigationError').textContent=error.message;button.disabled=false}
-});
-$('newInvestigationButton').onclick=()=>{$('investigationForm').hidden=false;$('personName').focus()};
-$('cancelInvestigationButton').onclick=()=>{$('investigationForm').hidden=true;$('investigationError').textContent='';$('personName').value=''};
-$('refreshInvestigationsButton').onclick=loadInvestigations;
-$('logoutButton').onclick=()=>{localStorage.removeItem(TOKEN_KEY);showAuth();setTab('login');$('loginPassword').value='';history.replaceState(null,'','/ui')};
-(async()=>{
-  if(!token())return;
-  try{const user=await request('/auth/me');showWorkspace(user)}
-  catch{localStorage.removeItem(TOKEN_KEY);showAuth()}
-})();
-</script>
-</body>
-</html>
+async function request(path,options={}){const headers={'Content-Type':'application/json',...(options.headers||{})};if(token())headers.Authorization='Bearer '+token();const r=await fetch(API+path,{...options,headers});let data=null;try{data=await r.json()}catch{}if(!r.ok)throw new Error(data?.detail||'Error HTTP '+r.status);return data}
+function setTab(tab){const login=tab==='login';$('loginForm').hidden=!login;$('registerForm').hidden=login;$('loginTab').classList.toggle('primary',login);$('registerTab').classList.toggle('primary',!login);$('loginTab').setAttribute('aria-selected',String(login));$('registerTab').setAttribute('aria-selected',String(!login));$('loginError').textContent='';$('registerError').textContent=''}
+async function establishSession(data){localStorage.setItem(TOKEN_KEY,data.access_token);await request('/auth/me');location.replace('/ui/workspace')}
+$('loginTab').onclick=()=>setTab('login');$('registerTab').onclick=()=>setTab('register');
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();const b=$('loginButton');b.disabled=true;$('loginError').textContent='';try{const data=await request('/auth/login',{method:'POST',body:JSON.stringify({email:$('loginEmail').value.trim(),password:$('loginPassword').value})});await establishSession(data)}catch(err){localStorage.removeItem(TOKEN_KEY);$('loginError').textContent=err.message}finally{b.disabled=false}});
+$('registerForm').addEventListener('submit',async e=>{e.preventDefault();const b=$('registerButton'),password=$('registerPassword').value;b.disabled=true;$('registerError').textContent='';if(password.length<12){$('registerError').textContent='La contraseña debe tener al menos 12 caracteres.';b.disabled=false;return}if(password!==$('registerConfirm').value){$('registerError').textContent='Las contraseñas no coinciden.';b.disabled=false;return}try{const data=await request('/auth/register',{method:'POST',body:JSON.stringify({email:$('registerEmail').value.trim(),password})});await establishSession(data)}catch(err){$('registerError').textContent=err.message}finally{b.disabled=false}});
+(async()=>{if(!token())return;try{await request('/auth/me');location.replace('/ui/workspace')}catch{localStorage.removeItem(TOKEN_KEY)}})();
+</script></body></html>
