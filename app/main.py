@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from sqlalchemy import inspect, text
 
 from app.api import router
 from app.auth import admin_router, auth_router, organization_router
@@ -11,6 +12,15 @@ from app.db import Base, engine
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    # Small forward-compatible schema migration for existing Codespaces databases.
+    with engine.begin() as connection:
+        if engine.dialect.name == "postgresql":
+            connection.execute(text("ALTER TYPE jobstatus ADD VALUE IF NOT EXISTS 'draft'"))
+        columns = {column["name"] for column in inspect(connection).get_columns("jobs")}
+        if "investigation_title" not in columns:
+            connection.execute(text("ALTER TABLE jobs ADD COLUMN investigation_title TEXT"))
+        if "notes" not in columns:
+            connection.execute(text("ALTER TABLE jobs ADD COLUMN notes TEXT"))
     yield
 
 
