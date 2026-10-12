@@ -115,3 +115,112 @@ def test_read_only_shared_copy_can_exit_without_checkpoint_or_restore():
     from pathlib import Path
     auth_source = (Path(__file__).resolve().parents[1] / "app" / "auth.py").read_text(encoding="utf-8")
     assert "This shared copy does not grant editing permission" in auth_source
+
+
+def test_entity_organization_requires_administrative_provisioning(monkeypatch):
+    from contextlib import contextmanager
+    from fastapi import HTTPException, Request
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app import auth
+    from app.db import Base
+    from app.models import User, UserRole
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    investigator = User(
+        email="investigator@example.com",
+        password_hash="test",
+        global_role=UserRole.investigator,
+    )
+    session.add(investigator)
+    session.flush()
+
+    @contextmanager
+    def fake_db_session():
+        yield session
+
+    monkeypatch.setattr(auth, "db_session", fake_db_session)
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/v1/organizations",
+        "headers": [],
+        "query_string": b"",
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+        "scheme": "http",
+        "path_params": {},
+        "root_path": "",
+    }
+    request = Request(scope)
+    try:
+        try:
+            auth.authorize_api_request(request, investigator)
+            assert False, "Self-service organization creation must be forbidden"
+        except HTTPException as error:
+            assert error.status_code == 403
+            assert "verified administrative provisioning" in error.detail
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_administrative_entity_provisioning_binds_verified_manager_and_identifier(monkeypatch):
+    from contextlib import contextmanager
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app import auth
+    from app.db import Base
+    from app.models import Organization, OrganizationMembership, MembershipRole, User, UserRole
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    manager = User(
+        email="manager@institution.example",
+        password_hash="test",
+        global_role=UserRole.investigator,
+    )
+    session.add(manager)
+    session.flush()
+
+    @contextmanager
+    def fake_db_session():
+        yield session
+
+    monkeypatch.setattr(auth, "db_session", fake_db_session)
+    payload = auth.AdminOrganizationCreateRequest(
+        name="Instituto de Investigación",
+        slug="instituto-investigacion-001",
+        manager_email="manager@institution.example",
+    )
+    result = auth.admin_create_organization(payload)
+    organization = session.scalar(
+        select(Organization).where(Organization.slug == "instituto-investigacion-001")
+    )
+    membership = session.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization.id,
+            OrganizationMembership.user_id == manager.id,
+        )
+    )
+    assert result["entity_identifier"] == "instituto-investigacion-001"
+    assert result["manager_email"] == manager.email
+    assert membership is not None
+    assert membership.role == MembershipRole.entity
+    session.close()
+    engine.dispose()
