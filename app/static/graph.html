@@ -611,13 +611,14 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   const activateReadOnlyMode=()=>{
     readOnlySession=true;
     const status=document.getElementById('saveStatus');
-    if(status)status.textContent='Copia compartida: solo lectura';
+    if(status)status.textContent='Acceso de solo lectura';
     ['manualSearch','manualSearchBtn','createEntityBtn','saveEntityBtn','saveEntityEditBtn',
      'saveRelationshipBtn','saveRelationshipEditBtn','shareInvestigationBtn','mergeInvestigationBtn']
       .forEach(id=>{const control=document.getElementById(id);if(control)control.disabled=true;});
   };
   window.detectReadOnlySession=async()=>{
     const job=await api(`/jobs/${encodeURIComponent(jobId)}`);
+    if(job?.can_edit===false){activateReadOnlyMode();return true;}
     if(!job?.is_shared){readOnlySession=false;return false;}
     if(!job.is_owner){activateReadOnlyMode();return true;}
     const shares=await api('/shared-investigations');
