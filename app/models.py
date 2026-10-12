@@ -23,6 +23,7 @@ def utcnow():
 
 
 class JobStatus(str, enum.Enum):
+    draft = "draft"
     queued = "queued"
     running = "running"
     completed = "completed"
@@ -121,6 +122,9 @@ class Job(Base):
         default=lambda: str(uuid.uuid4()),
     )
     input_value: Mapped[str] = mapped_column(Text, nullable=False)
+    # Human-readable investigation title is distinct from an actual search query.
+    investigation_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT", name="fk_jobs_owner_user"), nullable=True, index=True
     )
