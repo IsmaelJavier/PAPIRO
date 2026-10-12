@@ -16,6 +16,9 @@ async def lifespan(app: FastAPI):
     with engine.begin() as connection:
         if engine.dialect.name == "postgresql":
             connection.execute(text("ALTER TYPE jobstatus ADD VALUE IF NOT EXISTS 'draft'"))
+        # Enforce a single platform administrator in every supported database.
+        # If legacy data has duplicates, startup fails rather than silently changing roles.
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_single_superuser ON users (global_role) WHERE global_role = 'superuser'"))
         columns = {column["name"] for column in inspect(connection).get_columns("jobs")}
         if "investigation_title" not in columns:
             connection.execute(text("ALTER TABLE jobs ADD COLUMN investigation_title TEXT"))
