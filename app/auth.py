@@ -34,6 +34,7 @@ class TokenResponse(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=1024)
+    global_role: str = "investigator"
 
 
 class UserResponse(BaseModel):
@@ -123,8 +124,10 @@ def me(user: User = Depends(get_current_user)):
 
 @auth_router.post("/register", response_model=TokenResponse, status_code=201)
 def register(payload: RegisterRequest):
-    """Create a personal investigator account and return a session token."""
+    """Create a personal account; public registration can never grant admin."""
     _secret()
+    if payload.global_role not in {UserRole.investigator.value, UserRole.user.value}:
+        raise HTTPException(status_code=422, detail="Registration role must be investigator or user")
     email = str(payload.email).strip().lower()
     with db_session() as session:
         if session.scalar(select(User).where(User.email == email)):
@@ -132,7 +135,7 @@ def register(payload: RegisterRequest):
         user = User(
             email=email,
             password_hash=hash_password(payload.password),
-            global_role=UserRole.investigator,
+            global_role=UserRole(payload.global_role),
             is_active=True,
         )
         session.add(user)
