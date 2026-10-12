@@ -97,3 +97,18 @@ def test_sharing_creates_an_independent_copy(monkeypatch):
 
     session.close()
     engine.dispose()
+
+def test_read_only_shared_copy_can_exit_without_checkpoint_or_restore():
+    with TestClient(app) as client:
+        response = client.get("/ui/job/example")
+    assert response.status_code == 200
+    html = response.text
+    # A read-only copy must be detected before opening an editing checkpoint.
+    assert "const isReadOnly=await detectReadOnlySession();" in html
+    assert "if(!isReadOnly)await beginInvestigationEditingSession();" in html
+    # Exit/logout must bypass server-side commit/restore for read-only sessions.
+    assert "if(readOnlySession){restoreLocalBaseline();location.href='/ui/workspace';return;}" in html
+    assert "if(readOnlySession){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}" in html
+    # Editing remains unavailable in the UI; server-side authorization remains authoritative.
+    assert "activateReadOnlyMode" in html
+    assert "This shared copy does not grant editing permission" not in html
