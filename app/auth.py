@@ -196,6 +196,12 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
                 raise HTTPException(status_code=404, detail="Investigation not found")
             if job.owner_user_id is None:
                 raise HTTPException(status_code=404, detail="Investigation not found")
+            shared_copy = session.scalar(select(InvestigationShare).where(InvestigationShare.shared_job_id == job.id))
+            if shared_copy and shared_copy.owner_user_id == actor.id:
+                checkpoint_route = path.endswith("/checkpoint") or path.endswith("/checkpoint/commit") or path.endswith("/checkpoint/restore")
+                if method == "GET" or (method == "POST" and checkpoint_route):
+                    return
+                raise HTTPException(status_code=403, detail="The original investigator can review this copy but cannot edit it directly")
             if job.organization_id:
                 membership = session.scalar(select(OrganizationMembership).where(
                     OrganizationMembership.organization_id == job.organization_id,
@@ -213,7 +219,6 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
             if job.owner_user_id == actor.id:
                 if method != "GET" and actor.global_role == UserRole.user:
                     raise HTTPException(status_code=403, detail="This account is read-only")
-                shared_copy = session.scalar(select(InvestigationShare).where(InvestigationShare.shared_job_id == job.id))
                 if shared_copy and method != "GET" and shared_copy.permission != "edit":
                     raise HTTPException(status_code=403, detail="This shared copy does not grant editing permission")
                 return
