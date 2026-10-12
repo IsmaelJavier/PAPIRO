@@ -577,8 +577,10 @@ def restore_investigation_checkpoint(job_id: str, request: Request):
         checkpoint_id = checkpoint.id
         snapshot = checkpoint.snapshot
         checkpoint.status = "restoring"
-        session.commit()  # workers must observe the discard request before the restore starts
         try:
+            # Keep the job lock and this transaction until the entire restore is
+            # complete. Workers use the same lock, so none can write between the
+            # baseline replacement and the terminal checkpoint state.
             _restore_investigation_snapshot(session, job_id, snapshot)
             checkpoint = session.get(InvestigationCheckpoint, checkpoint_id)
             checkpoint.status = "discarded"
