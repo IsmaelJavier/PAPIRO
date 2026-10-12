@@ -622,9 +622,6 @@ def test_merge_requires_review_and_invalidates_review_when_copy_changes(monkeypa
         assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review", json={"snapshot_token": review.json()["snapshot_token"]}).status_code == 200
         merged = client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/merge")
         assert merged.status_code == 200, merged.text
-        # The API's Core UPDATE does not refresh ORM instances retained by this
-        # single-session test double; real requests use a fresh session.
-        session.expire_all()
         assert session.get(Job, original_id).notes == "changed after review"
     session.close(); engine.dispose()
 
@@ -723,8 +720,6 @@ def test_three_way_merge_preserves_non_overlapping_owner_and_collaborator_change
         assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review", json={"snapshot_token": review.json()["snapshot_token"]}).status_code == 200
         merged = client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/merge")
         assert merged.status_code == 200, merged.text
-        # Expire the identity map so assertions inspect the persisted merged rows.
-        session.expire_all()
         refreshed_original = session.get(Job, original_id)
         refreshed_copy = session.get(Job, share.shared_job_id)
         assert refreshed_original.notes == "owner-only notes change"

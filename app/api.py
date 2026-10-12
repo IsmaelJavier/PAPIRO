@@ -424,6 +424,10 @@ def _restore_investigation_snapshot(session, job_id, snapshot):
             }
             session.execute(insert(table).values(**row))
 
+    # Snapshot restoration uses Core statements, so invalidate ORM objects that
+    # may still hold pre-restore values in a long-lived session or test fixture.
+    session.expire_all()
+
 
 def _lock_job_for_mutation(session, job_id):
     """Serialize every investigation write against checkpoint restoration."""
