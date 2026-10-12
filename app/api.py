@@ -157,6 +157,81 @@ def _make_investigation_snapshot(session, job_id):
     }
 
 
+def _normalize_shared_snapshot(snapshot, share, baseline):
+    """Translate a collaborator snapshot into the original investigation ID space."""
+    metadata_tables = {table.name: table for table in _investigation_tables()}
+    reverse_map = {
+        table_name: {str(copy_id): str(original_id) for original_id, copy_id in mapping.items()}
+        for table_name, mapping in (share.id_map or {}).items()
+    }
+    baseline_jobs = next((item["rows"] for item in baseline.get("tables", []) if item["name"] == "jobs"), [])
+    baseline_job = baseline_jobs[0] if baseline_jobs else {}
+    normalized = {"version": snapshot.get("version", 1), "tables": []}
+    for item in snapshot.get("tables", []):
+        table = metadata_tables.get(item["name"])
+        if table is None:
+            continue
+        rows = []
+        pk_names = [column.name for column in table.primary_key.columns]
+        for encoded in item.get("rows", []):
+            row = dict(encoded)
+            for pk in pk_names:
+                value = row.get(pk)
+                if value is not None:
+                    row[pk] = reverse_map.get(table.name, {}).get(str(value), str(value))
+            for fk in table.foreign_keys:
+                column_name = fk.parent.name
+                value = row.get(column_name)
+                if value is not None:
+                    row[column_name] = reverse_map.get(fk.column.table.name, {}).get(str(value), str(value))
+            if table.name == "jobs":
+                row["id"] = baseline_job.get("id", share.original_job_id)
+                for name in ("owner_user_id", "organization_id"):
+                    if name in baseline_job:
+                        row[name] = baseline_job[name]
+            rows.append(row)
+        normalized["tables"].append({"name": item["name"], "rows": rows})
+    return normalized
+
+
+def _investigation_snapshot_diff(baseline, current):
+    """Return a bounded row-level diff for the proposal review screen."""
+    before_tables = {item["name"]: item.get("rows", []) for item in baseline.get("tables", [])}
+    after_tables = {item["name"]: item.get("rows", []) for item in current.get("tables", [])}
+    table_meta = {table.name: table for table in _investigation_tables()}
+    result = []
+    for table_name in sorted(set(before_tables) | set(after_tables)):
+        table = table_meta.get(table_name)
+        if table is None:
+            continue
+        pk_names = [column.name for column in table.primary_key.columns]
+        def indexed(rows):
+            return {tuple(str(row.get(key)) for key in pk_names): row for row in rows}
+        before = indexed(before_tables.get(table_name, []))
+        after = indexed(after_tables.get(table_name, []))
+        added_keys = sorted(set(after) - set(before))
+        deleted_keys = sorted(set(before) - set(after))
+        common = sorted(set(before) & set(after))
+        modified = [
+            {"id": "/".join(key), "fields": sorted(
+                field for field in set(before[key]) | set(after[key])
+                if before[key].get(field) != after[key].get(field)
+            )}
+            for key in common if before[key] != after[key]
+        ]
+        if added_keys or deleted_keys or modified:
+            result.append({
+                "table": table_name, "added": len(added_keys),
+                "deleted": len(deleted_keys), "modified": len(modified),
+                "details": (
+                    [{"operation": "added", "id": "/".join(key)} for key in added_keys[:50]]
+                    + [{"operation": "deleted", "id": "/".join(key)} for key in deleted_keys[:50]]
+                    + [{"operation": "modified", **row} for row in modified[:50]]
+                ),
+            })
+    return result
+
+
 def _restore_investigation_snapshot(session, job_id, snapshot):
     tables, current = _collect_investigation_rows(session, job_id)
     table_by_name = {table.name: table for table in tables}
@@ -656,9 +731,17 @@ def list_investigation_shares(job_id: str, request: Request):
         shares = session.scalars(select(InvestigationShare).where(
             InvestigationShare.original_job_id == job_id
         ).order_by(InvestigationShare.created_at.desc())).all()
-        return [{"share_id": s.id, "shared_job_id": s.shared_job_id,
-                 "email": session.get(User, s.collaborator_user_id).email,
-                 "permission": s.permission, "created_at": s.created_at} for s in shares]
+        result = []
+        for share in shares:
+            current_copy = _make_investigation_snapshot(session, share.shared_job_id)
+            result.append({
+                "share_id": share.id, "shared_job_id": share.shared_job_id,
+                "email": session.get(User, share.collaborator_user_id).email,
+                "permission": share.permission, "created_at": share.created_at,
+                "reviewed": share.reviewed_snapshot is not None and current_copy == share.reviewed_snapshot,
+                "reviewed_at": share.reviewed_at,
+            })
+        return result
 
 
 @router.get("/shared-investigations")
@@ -672,6 +755,47 @@ def list_shared_investigations(request: Request):
                  "permission": s.permission, "created_at": s.created_at,
                  "title": session.get(Job, s.shared_job_id).investigation_title if session.get(Job, s.shared_job_id) else None}
                 for s in shares]
+
+
+@router.get("/jobs/{job_id}/shares/{share_id}/review")
+def review_shared_investigation(job_id: str, share_id: str, request: Request):
+    """Return the row-level proposal diff without changing either investigation."""
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        share = session.get(InvestigationShare, share_id)
+        if not share or share.original_job_id != job_id:
+            raise HTTPException(status_code=404, detail="Shared investigation not found")
+        if share.owner_user_id != user_id:
+            raise HTTPException(status_code=403, detail="Only the original investigator can review this proposal")
+        current_copy = _make_investigation_snapshot(session, share.shared_job_id)
+        normalized_copy = _normalize_shared_snapshot(current_copy, share, share.base_snapshot)
+        changes = _investigation_snapshot_diff(share.base_snapshot, normalized_copy)
+        return {
+            "share_id": share.id, "original_job_id": share.original_job_id,
+            "shared_job_id": share.shared_job_id,
+            "collaborator_email": session.get(User, share.collaborator_user_id).email,
+            "permission": share.permission, "changes": changes,
+            "change_count": sum(item["added"] + item["deleted"] + item["modified"] for item in changes),
+            "reviewed": share.reviewed_snapshot is not None and current_copy == share.reviewed_snapshot,
+            "reviewed_at": share.reviewed_at,
+        }
+
+
+@router.post("/jobs/{job_id}/shares/{share_id}/review")
+def mark_shared_investigation_reviewed(job_id: str, share_id: str, request: Request):
+    """Record the exact collaborator snapshot that the owner has reviewed."""
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        original = session.get(Job, job_id)
+        share = session.get(InvestigationShare, share_id)
+        if not original or not share or share.original_job_id != job_id:
+            raise HTTPException(status_code=404, detail="Shared investigation not found")
+        if original.owner_user_id != user_id or share.owner_user_id != user_id:
+            raise HTTPException(status_code=403, detail="Only the original investigator can review this proposal")
+        share.reviewed_snapshot = _make_investigation_snapshot(session, share.shared_job_id)
+        share.reviewed_at = datetime.now(timezone.utc)
+        session.flush()
+        return {"share_id": share.id, "reviewed": True, "reviewed_at": share.reviewed_at}
 
 
 @router.post("/shares/{share_id}/comments", status_code=201)
@@ -718,6 +842,9 @@ def merge_shared_investigation(job_id: str, share_id: str, request: Request):
             raise HTTPException(status_code=404, detail="Share or original investigation not found")
         if original.owner_user_id != user_id or share.owner_user_id != user_id:
             raise HTTPException(status_code=403, detail="Only the original investigator can merge a shared copy")
+        current_copy_snapshot = _make_investigation_snapshot(session, share.shared_job_id)
+        if share.reviewed_snapshot is None or current_copy_snapshot != share.reviewed_snapshot:
+            raise HTTPException(status_code=409, detail="Review the current collaborator changes before pulling or merging them.")
         current_baseline = _make_investigation_snapshot(session, job_id)
         if current_baseline != share.base_snapshot:
             raise HTTPException(status_code=409, detail="The original changed after sharing. Reconcile the changes before merging.")
@@ -762,6 +889,8 @@ def merge_shared_investigation(job_id: str, share_id: str, request: Request):
         # Advance the collaboration baseline so the same share can be merged again
         # after further collaborator edits, while still detecting concurrent changes.
         share.base_snapshot = _make_investigation_snapshot(session, job_id)
+        share.reviewed_snapshot = None
+        share.reviewed_at = None
         share.id_map = {
             table_name: {original_id: copy_id for copy_id, original_id in mapping.items()}
             for table_name, mapping in target_ids.items()
