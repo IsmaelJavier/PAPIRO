@@ -292,30 +292,49 @@ def admin_create_organization(payload: AdminOrganizationCreateRequest, request: 
     """Provision an organization only after an administrator verifies its identity."""
     email = str(payload.manager_email).strip().lower()
     with db_session() as session:
-        if session.scalar(select(Organization).where(Organization.slug == payload.slug)):
-            raise HTTPException(status_code=409, detail="Organization identifier already exists")
+        org = session.scalar(select(Organization).where(Organization.slug == payload.slug))
+        if org and org.verified_at is not None:
+            raise HTTPException(status_code=409, detail="Organization identifier is already verified")
         manager = session.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not manager:
             raise HTTPException(status_code=404, detail="The verified entity manager must have an active account")
         if manager.global_role != UserRole.entity:
             raise HTTPException(status_code=422, detail="The organization account must have the entity role")
         administrator_id = request.state.current_user_id
-        org = Organization(
-            name=payload.name.strip(),
-            slug=payload.slug,
-            contact_email=manager.email,
-            verified_at=datetime.now(timezone.utc),
-            verified_by_user_id=administrator_id,
-            created_by_user_id=administrator_id,
-        )
-        session.add(org)
-        session.flush()
-        membership = OrganizationMembership(
-            organization_id=org.id,
-            user_id=manager.id,
-            role=MembershipRole.entity,
-        )
-        session.add(membership)
+        now = datetime.now(timezone.utc)
+        if org is None:
+            org = Organization(
+                name=payload.name.strip(),
+                slug=payload.slug,
+                contact_email=manager.email,
+                verified_at=now,
+                verified_by_user_id=administrator_id,
+                created_by_user_id=administrator_id,
+            )
+            session.add(org)
+            session.flush()
+        else:
+            # Explicit admin verification may activate an existing legacy org.
+            # Preserve its identifier, creator and all attached investigations.
+            org.name = payload.name.strip()
+            org.contact_email = manager.email
+            org.verified_at = now
+            org.verified_by_user_id = administrator_id
+        membership = session.scalar(select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == org.id,
+            OrganizationMembership.user_id == manager.id,
+        ))
+        if membership is None:
+            membership = OrganizationMembership(
+                organization_id=org.id,
+                user_id=manager.id,
+                role=MembershipRole.entity,
+                is_active=True,
+            )
+            session.add(membership)
+        else:
+            membership.role = MembershipRole.entity
+            membership.is_active = True
         session.flush()
         return {
             "id": org.id,
