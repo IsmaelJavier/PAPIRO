@@ -753,6 +753,7 @@ class InvestigationShare(Base):
     collaborator_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     permission: Mapped[str] = mapped_column(String(16), nullable=False, default="read")
     base_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    id_map: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
