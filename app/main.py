@@ -25,14 +25,20 @@ app.include_router(router)
 @app.get("/ui", include_in_schema=False)
 def access_ui():
     """Serve the authentication and personal investigation landing page."""
-    return FileResponse(Path(__file__).resolve().parent / "static" / "index.html")
+    return FileResponse(
+        Path(__file__).resolve().parent / "static" / "index.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"},
+    )
 
 
 @app.get("/ui/job/{job_id}", include_in_schema=False)
 @app.get("/ui/graph/{job_id}", include_in_schema=False)
 def investigator_ui(job_id: str):
     """Serve the investigator workspace for an OSINT job."""
-    return FileResponse(Path(__file__).resolve().parent / "static" / "graph.html")
+    return FileResponse(
+        Path(__file__).resolve().parent / "static" / "graph.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"},
+    )
 
 
 @app.get("/health")
