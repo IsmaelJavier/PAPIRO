@@ -251,3 +251,21 @@ def test_entity_provisioning_is_admin_only_and_exposed_in_admin_workspace():
     assert 'id="adminOrganizationIdentifier"' in workspace.text
     assert 'id="adminOrganizationEmail"' in workspace.text
     assert "/admin/organizations" in workspace.text
+
+
+def test_organization_scoped_investigation_creation_is_available_to_members():
+    from app.main import app
+
+    routes = {
+        (route.path, method)
+        for route in app.routes
+        for method in (getattr(route, "methods", None) or set())
+    }
+    assert ("/api/v1/organizations", "GET") in routes
+    assert ("/api/v1/investigations", "POST") in routes
+    with TestClient(app) as client:
+        response = client.get("/ui/workspace")
+    assert response.status_code == 200
+    assert 'id="investigationOrganization"' in response.text
+    assert "loadInvestigationOrganizations" in response.text
+    assert "organization_id" in response.text
