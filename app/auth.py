@@ -224,8 +224,17 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
 
         # All other API routes require an authenticated investigator. The
         # handler still has to scope creation to the current user/organization.
-        if actor.global_role == UserRole.user and method != "GET":
-            raise HTTPException(status_code=403, detail="This account is read-only")
+        if path.startswith("/api/v1/shares/") and path.endswith("/comments"):
+            # The comment handler verifies share participation and the selected
+            # permission; entity accounts may comment only when they are a party.
+            return
+        if actor.global_role in {UserRole.user, UserRole.entity} and method != "GET":
+            detail = (
+                "Entity accounts cannot create or modify investigation content"
+                if actor.global_role == UserRole.entity
+                else "This account is read-only"
+            )
+            raise HTTPException(status_code=403, detail=detail)
 
 
 class AdminUserCreateRequest(BaseModel):
@@ -279,7 +288,7 @@ def admin_create_user(payload: AdminUserCreateRequest, request: Request):
 
 
 @admin_router.post("/organizations", status_code=201)
-def admin_create_organization(payload: AdminOrganizationCreateRequest):
+def admin_create_organization(payload: AdminOrganizationCreateRequest, request: Request):
     """Provision an organization only after an administrator verifies its identity."""
     email = str(payload.manager_email).strip().lower()
     with db_session() as session:
@@ -288,12 +297,16 @@ def admin_create_organization(payload: AdminOrganizationCreateRequest):
         manager = session.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not manager:
             raise HTTPException(status_code=404, detail="The verified entity manager must have an active account")
-        if manager.global_role != UserRole.investigator:
-            raise HTTPException(status_code=422, detail="The entity manager must use an investigator account")
+        if manager.global_role != UserRole.entity:
+            raise HTTPException(status_code=422, detail="The organization account must have the entity role")
+        administrator_id = request.state.current_user_id
         org = Organization(
             name=payload.name.strip(),
             slug=payload.slug,
-            created_by_user_id=manager.id,
+            contact_email=manager.email,
+            verified_at=datetime.now(timezone.utc),
+            verified_by_user_id=administrator_id,
+            created_by_user_id=administrator_id,
         )
         session.add(org)
         session.flush()
@@ -309,6 +322,9 @@ def admin_create_organization(payload: AdminOrganizationCreateRequest):
             "name": org.name,
             "slug": org.slug,
             "entity_identifier": org.slug,
+            "contact_email": org.contact_email,
+            "verified_at": org.verified_at,
+            "verified_by_user_id": org.verified_by_user_id,
             "manager_email": manager.email,
             "role": membership.role.value,
         }
