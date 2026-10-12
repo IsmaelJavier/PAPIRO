@@ -24,6 +24,10 @@ def test_workspace_has_own_dashboard_and_optional_investigation_creation():
         assert 'id="investigationForm" hidden' in response.text
         assert "no es necesario hacerlo para entrar" in response.text
         assert 'id="logoutModal"' in response.text
+        assert 'id="investigationName"' in response.text
+        assert 'id="investigationNotes"' in response.text
+        assert "request('/investigations'" in response.text
+        assert "request('/ingest/name'" not in response.text
 
 
 def test_investigation_ui_has_autosave_exit_and_logout_confirmation():
@@ -37,4 +41,7 @@ def test_investigation_ui_has_autosave_exit_and_logout_confirmation():
         assert 'id="saveAndLogout"' in response.text
         assert 'id="logoutWithoutViewSave"' in response.text
         assert 'id="cancelSessionExit"' in response.text
+        assert 'id="leaveWithoutSaving"' in response.text
+        assert 'id="saveAndLeave"' in response.text
+        assert "DOMContentLoaded" in response.text
         assert "Vista guardada automáticamente" in response.text
