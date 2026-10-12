@@ -203,6 +203,10 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
                     if method == "GET":
                         return
                     raise HTTPException(status_code=403, detail="Entity managers cannot modify investigation content")
+                if membership and membership.role == MembershipRole.investigator:
+                    if method != "GET" and actor.global_role == UserRole.user:
+                        raise HTTPException(status_code=403, detail="This account is read-only")
+                    return
             if job.owner_user_id == actor.id:
                 if method != "GET" and actor.global_role == UserRole.user:
                     raise HTTPException(status_code=403, detail="This account is read-only")
