@@ -224,3 +224,24 @@ def test_administrative_entity_provisioning_binds_verified_manager_and_identifie
     assert membership.role == MembershipRole.entity
     session.close()
     engine.dispose()
+
+
+def test_entity_provisioning_is_admin_only_and_exposed_in_admin_workspace():
+    from app.main import app
+
+    route = next(
+        route for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/admin/organizations"
+        and "POST" in (getattr(route, "methods", None) or set())
+    )
+    assert route is not None
+    with TestClient(app) as client:
+        login = client.get("/ui")
+        workspace = client.get("/ui/workspace")
+    assert login.status_code == 200
+    assert 'value="entity"' not in login.text
+    assert workspace.status_code == 200
+    assert 'id="adminCreateOrganizationForm"' in workspace.text
+    assert 'id="adminOrganizationIdentifier"' in workspace.text
+    assert 'id="adminOrganizationEmail"' in workspace.text
+    assert "/admin/organizations" in workspace.text
