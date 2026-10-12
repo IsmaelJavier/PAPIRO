@@ -502,17 +502,23 @@ def create_investigation_checkpoint(job_id: str, request: Request):
             select(InvestigationCheckpoint)
             .where(
                 InvestigationCheckpoint.job_id == job_id,
-                InvestigationCheckpoint.status == "active",
+                InvestigationCheckpoint.status.in_(("active", "restoring")),
             )
             .order_by(InvestigationCheckpoint.created_at.desc())
         )
-        if active:
-            if active.user_id != user_id:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Esta investigación ya tiene una sesión de edición activa en otro usuario.",
-                )
+        if active and active.user_id != user_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Esta investigación ya tiene una sesión de edición activa en otro usuario.",
+            )
+        if active and active.status == "active":
             return {"job_id": job_id, "checkpoint_id": active.id, "status": active.status, "reused": True}
+        if active and active.status == "restoring":
+            # Recover an interrupted discard before allowing another editing session.
+            _restore_investigation_snapshot(session, job_id, active.snapshot)
+            active.status = "discarded"
+            active.closed_at = datetime.now(timezone.utc)
+            session.flush()
 
         snapshot = _make_investigation_snapshot(session, job_id)
         checkpoint = InvestigationCheckpoint(
@@ -559,7 +565,7 @@ def restore_investigation_checkpoint(job_id: str, request: Request):
             select(InvestigationCheckpoint)
             .where(
                 InvestigationCheckpoint.job_id == job_id,
-                InvestigationCheckpoint.status == "active",
+                InvestigationCheckpoint.status.in_(("active", "restoring")),
             )
             .order_by(InvestigationCheckpoint.created_at.desc())
         )
