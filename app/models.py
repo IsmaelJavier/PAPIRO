@@ -795,3 +795,21 @@ class InvestigationCheckpoint(Base):
         DateTime(timezone=True), default=utcnow, nullable=False
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EntityRegistrationRequest(Base):
+    """Public request for an entity account; no user privileges exist until approval."""
+
+    __tablename__ = "entity_registration_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    organization_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    organization_slug: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    organization_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
