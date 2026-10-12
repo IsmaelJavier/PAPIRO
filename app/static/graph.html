@@ -581,7 +581,25 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   let checkpointReady=false;
   let checkpointPromise=null;
   let exitInProgress=false;
+  let readOnlySession=false;
   const openSessionModal=()=>{sessionModal.style.display='flex';};
+  const activateReadOnlyMode=()=>{
+    readOnlySession=true;
+    const status=document.getElementById('saveStatus');
+    if(status)status.textContent='Copia compartida: solo lectura';
+    ['manualSearch','manualSearchBtn','createEntityBtn','saveEntityBtn','saveEntityEditBtn',
+     'saveRelationshipBtn','saveRelationshipEditBtn','shareInvestigationBtn','mergeInvestigationBtn']
+      .forEach(id=>{const control=document.getElementById(id);if(control)control.disabled=true;});
+  };
+  const detectReadOnlySession=async()=>{
+    const job=await api(`/jobs/${encodeURIComponent(jobId)}`);
+    if(!job?.is_shared)return false;
+    if(!job.is_owner){activateReadOnlyMode();return true;}
+    const shares=await api('/shared-investigations');
+    const share=shares.find(item=>item.job_id===jobId);
+    if(share && share.permission!=='edit'){activateReadOnlyMode();return true;}
+    return false;
+  };
   const setExitProgress=message=>{const status=document.getElementById('exitProgress');if(status){status.textContent=message||'';status.hidden=!message;}};
   const closeSessionModal=()=>{if(!exitInProgress){setExitProgress('');sessionModal.style.display='none';}};
   const saveView=()=>{if(cy)savePositions();persistHidden();};
@@ -610,12 +628,16 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
     localStorage.removeItem(baselineKey);
   };
   const leaveToWorkspace=async()=>{
-    if(exitInProgress)return;exitInProgress=true;setExitProgress('Confirmando los cambios guardados…');
+    if(exitInProgress)return;exitInProgress=true;
+    if(readOnlySession){restoreLocalBaseline();location.href='/ui/workspace';return;}
+    setExitProgress('Confirmando los cambios guardados…');
     try{await window.beginInvestigationEditingSession();saveView();await closeCheckpoint();location.href='/ui/workspace';}
     catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudieron confirmar los cambios. La sesión sigue abierta. ${e.message}`);}
   };
   const leaveWithoutSaving=async()=>{
-    if(exitInProgress)return;exitInProgress=true;setExitProgress('Restaurando el estado inicial… si hay una búsqueda en curso, puede tardar hasta que termine.');
+    if(exitInProgress)return;exitInProgress=true;
+    if(readOnlySession){restoreLocalBaseline();location.href='/ui/workspace';return;}
+    setExitProgress('Restaurando el estado inicial… si hay una búsqueda en curso, puede tardar hasta que termine.');
     try{
       await window.beginInvestigationEditingSession();
       await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
@@ -624,7 +646,9 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
     }catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudo descartar la sesión. No abandones la investigación hasta resolver el error. ${e.message}`);}
   };
   const logoutAndClearView=async()=>{
-    if(exitInProgress)return;exitInProgress=true;setExitProgress('Restaurando el estado inicial antes de cerrar sesión…');
+    if(exitInProgress)return;exitInProgress=true;
+    if(readOnlySession){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
+    setExitProgress('Restaurando el estado inicial antes de cerrar sesión…');
     try{
       await window.beginInvestigationEditingSession();
       await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
@@ -633,7 +657,9 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
     }catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudo descartar la sesión ni cerrar sesión. ${e.message}`);}
   };
   const saveAndLogout=async()=>{
-    if(exitInProgress)return;exitInProgress=true;setExitProgress('Confirmando los cambios antes de cerrar sesión…');
+    if(exitInProgress)return;exitInProgress=true;
+    if(readOnlySession){localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
+    setExitProgress('Confirmando los cambios antes de cerrar sesión…');
     try{await window.beginInvestigationEditingSession();saveView();await closeCheckpoint();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');}
     catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudieron guardar los cambios. La sesión sigue abierta. ${e.message}`);}
   };
@@ -678,7 +704,8 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
      if(!token){location.replace('/ui');return;}
      try{
        await api('/auth/me');
-       await beginInvestigationEditingSession();
+       const isReadOnly=await detectReadOnlySession();
+       if(!isReadOnly)await beginInvestigationEditingSession();
        await loadAll(true);
      }catch(error){
        if(/Authentication required|HTTP 401|Invalid or expired token/i.test(error.message)){
