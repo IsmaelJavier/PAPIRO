@@ -119,7 +119,11 @@ def process_person_name_job(job_id: str):
                 )
 
         if successful_sources == len(sources):
-            final_status = JobStatus.completed
+            if _discard_requested(session, job_id, checkpoint_id, task_started_at):
+            session.rollback()
+            return {"job_id": job_id, "status": "discarded", "cancelled": True}
+
+        final_status = JobStatus.completed
             error = None
         elif successful_sources > 0:
             final_status = JobStatus.partial
@@ -199,6 +203,9 @@ def process_manual_person_name_search(job_id: str, query: str):
                 errors.append(f"{source.name}: {exc}")
                 repo.finish_run(run, RunStatus.failed, error=str(exc))
 
+        if _discard_requested(session, job_id, checkpoint_id, task_started_at):
+            session.rollback()
+            return {"job_id": job_id, "query": query, "status": "discarded", "cancelled": True}
         correlation_count = len(repo.correlate_job(job.id)) if len(repo.get_findings(job.id)) > 1 else 0
         return {
             "job_id": job.id,
