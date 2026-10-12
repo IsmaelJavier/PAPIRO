@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import enum as py_enum
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -10,6 +11,7 @@ from app.db import Base, db_session
 from app.models import (
     Correlation, Entity, Finding, InvestigationCheckpoint, Job, JobStatus,
     MembershipRole, OrganizationMembership, Relationship, User, UserRole,
+    InvestigationShare, InvestigationComment,
 )
 from app.repository import Repository
 from app.schemas import (
@@ -523,6 +525,196 @@ def delete_investigation(job_id: str, request: Request):
         session.flush()
     from fastapi import Response
     return Response(status_code=204)
+
+
+@router.post("/jobs/{job_id}/shares", status_code=201)
+def share_investigation(job_id: str, payload: dict, request: Request):
+    """Create a separate working copy for one registered investigator."""
+    user_id = request.state.current_user_id
+    email = str(payload.get("email", "")).strip().lower()
+    permission = payload.get("permission", "read")
+    if permission not in {"read", "comment", "edit"}:
+        raise HTTPException(status_code=422, detail="Permission must be read, comment or edit")
+    if not email:
+        raise HTTPException(status_code=422, detail="Collaborator email is required")
+    with db_session() as session:
+        original = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
+        if not original:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+        if original.owner_user_id != user_id:
+            raise HTTPException(status_code=403, detail="Only the original investigator can share this investigation")
+        if session.scalar(select(InvestigationShare.id).where(InvestigationShare.shared_job_id == job_id)):
+            raise HTTPException(status_code=403, detail="A shared copy cannot be shared again")
+        collaborator = session.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
+        if not collaborator:
+            raise HTTPException(status_code=404, detail="No active account exists for that email")
+        if collaborator.global_role != UserRole.investigator:
+            raise HTTPException(status_code=422, detail="Only investigator accounts can collaborate")
+        if collaborator.id == user_id:
+            raise HTTPException(status_code=422, detail="You cannot share an investigation with yourself")
+        existing = session.scalar(select(InvestigationShare).where(
+            InvestigationShare.original_job_id == job_id,
+            InvestigationShare.collaborator_user_id == collaborator.id,
+        ))
+        if existing:
+            raise HTTPException(status_code=409, detail="This investigator already has a shared copy")
+
+        base_snapshot = _make_investigation_snapshot(session, job_id)
+        tables, rows_by_table = _collect_investigation_rows(session, job_id)
+        id_map = {}
+        for table in tables:
+            pk_columns = list(table.primary_key.columns)
+            if len(pk_columns) != 1:
+                raise HTTPException(status_code=500, detail=f"Cannot clone table with composite primary key: {table.name}")
+            pk = pk_columns[0].name
+            id_map[table.name] = {
+                str(row[pk]): str(uuid.uuid4()) for row in rows_by_table.get(table.name, [])
+            }
+        shared_job_id = id_map["jobs"][job_id]
+        for table in tables:
+            for source_row in rows_by_table.get(table.name, []):
+                row = dict(source_row)
+                pk = list(table.primary_key.columns)[0].name
+                old_pk = str(row[pk])
+                row[pk] = id_map[table.name][old_pk]
+                for fk in table.foreign_keys:
+                    parent_map = id_map.get(fk.column.table.name, {})
+                    if str(row.get(fk.parent.name)) in parent_map:
+                        row[fk.parent.name] = parent_map[str(row[fk.parent.name])]
+                if table.name == "jobs":
+                    row["owner_user_id"] = collaborator.id
+                    row["organization_id"] = None
+                session.execute(insert(table).values(**row))
+        share = InvestigationShare(
+            original_job_id=job_id,
+            shared_job_id=shared_job_id,
+            owner_user_id=user_id,
+            collaborator_user_id=collaborator.id,
+            permission=permission,
+            base_snapshot=base_snapshot,
+            id_map=id_map,
+        )
+        session.add(share)
+        session.flush()
+        return {"share_id": share.id, "original_job_id": job_id, "shared_job_id": shared_job_id,
+                "collaborator_email": collaborator.email, "permission": permission}
+
+
+@router.get("/jobs/{job_id}/shares")
+def list_investigation_shares(job_id: str, request: Request):
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        job = session.get(Job, job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+        if job.owner_user_id != user_id:
+            raise HTTPException(status_code=403, detail="Only the original investigator can list shares")
+        shares = session.scalars(select(InvestigationShare).where(
+            InvestigationShare.original_job_id == job_id
+        ).order_by(InvestigationShare.created_at.desc())).all()
+        return [{"share_id": s.id, "shared_job_id": s.shared_job_id,
+                 "email": session.get(User, s.collaborator_user_id).email,
+                 "permission": s.permission, "created_at": s.created_at} for s in shares]
+
+
+@router.get("/shared-investigations")
+def list_shared_investigations(request: Request):
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        shares = session.scalars(select(InvestigationShare).where(
+            InvestigationShare.collaborator_user_id == user_id
+        ).order_by(InvestigationShare.created_at.desc())).all()
+        return [{"share_id": s.id, "job_id": s.shared_job_id, "original_job_id": s.original_job_id,
+                 "permission": s.permission, "created_at": s.created_at,
+                 "title": session.get(Job, s.shared_job_id).investigation_title if session.get(Job, s.shared_job_id) else None}
+                for s in shares]
+
+
+@router.post("/shares/{share_id}/comments", status_code=201)
+def add_investigation_comment(share_id: str, payload: dict, request: Request):
+    user_id = request.state.current_user_id
+    body = str(payload.get("body", "")).strip()
+    if not body or len(body) > 10000:
+        raise HTTPException(status_code=422, detail="Comment must contain 1–10000 characters")
+    with db_session() as session:
+        share = session.get(InvestigationShare, share_id)
+        if not share or user_id not in {share.owner_user_id, share.collaborator_user_id}:
+            raise HTTPException(status_code=404, detail="Shared investigation not found")
+        if user_id == share.collaborator_user_id and share.permission == "read":
+            raise HTTPException(status_code=403, detail="This share is read-only; comments are not permitted")
+        comment = InvestigationComment(share_id=share_id, author_user_id=user_id, body=body)
+        session.add(comment)
+        session.flush()
+        return {"id": comment.id, "share_id": share_id, "author_email": session.get(User, user_id).email,
+                "body": comment.body, "created_at": comment.created_at}
+
+
+@router.get("/shares/{share_id}/comments")
+def list_investigation_comments(share_id: str, request: Request):
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        share = session.get(InvestigationShare, share_id)
+        if not share or user_id not in {share.owner_user_id, share.collaborator_user_id}:
+            raise HTTPException(status_code=404, detail="Shared investigation not found")
+        comments = session.scalars(select(InvestigationComment).where(
+            InvestigationComment.share_id == share_id
+        ).order_by(InvestigationComment.created_at.asc())).all()
+        return [{"id": c.id, "author_email": session.get(User, c.author_user_id).email,
+                 "body": c.body, "created_at": c.created_at} for c in comments]
+
+
+@router.post("/jobs/{job_id}/shares/{share_id}/merge")
+def merge_shared_investigation(job_id: str, share_id: str, request: Request):
+    """Pull a shared copy back only when the original has not changed since sharing."""
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        original = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
+        share = session.get(InvestigationShare, share_id)
+        if not original or not share or share.original_job_id != job_id:
+            raise HTTPException(status_code=404, detail="Share or original investigation not found")
+        if original.owner_user_id != user_id or share.owner_user_id != user_id:
+            raise HTTPException(status_code=403, detail="Only the original investigator can merge a shared copy")
+        current_baseline = _make_investigation_snapshot(session, job_id)
+        if current_baseline != share.base_snapshot:
+            raise HTTPException(status_code=409, detail="The original changed after sharing. Reconcile the changes before merging.")
+        tables, original_rows = _collect_investigation_rows(session, job_id)
+        shared_tables, shared_rows = _collect_investigation_rows(session, share.shared_job_id)
+        reverse_map = {table: {copy_id: original_id for original_id, copy_id in mapping.items()}
+                       for table, mapping in share.id_map.items()}
+        target_ids = {}
+        for table in shared_tables:
+            pk = list(table.primary_key.columns)[0].name
+            target_ids[table.name] = {}
+            for row in shared_rows.get(table.name, []):
+                copied_id = str(row[pk])
+                target_ids[table.name][copied_id] = (
+                    job_id if table.name == "jobs" else
+                    reverse_map.get(table.name, {}).get(copied_id, str(uuid.uuid4()))
+                )
+        for table in reversed(tables):
+            if table.name == "jobs":
+                continue
+            for row in original_rows.get(table.name, []):
+                keys = [column == row[column.name] for column in table.primary_key.columns]
+                if keys:
+                    session.execute(delete(table).where(and_(*keys)))
+        for table in shared_tables:
+            if table.name == "jobs":
+                continue
+            for source_row in shared_rows.get(table.name, []):
+                row = dict(source_row)
+                pk = list(table.primary_key.columns)[0].name
+                row[pk] = target_ids[table.name][str(source_row[pk])]
+                for fk in table.foreign_keys:
+                    parent_map = target_ids.get(fk.column.table.name, {})
+                    if str(row.get(fk.parent.name)) in parent_map:
+                        row[fk.parent.name] = parent_map[str(row[fk.parent.name])]
+                session.execute(insert(table).values(**row))
+        shared_job = session.get(Job, share.shared_job_id)
+        original.investigation_title = shared_job.investigation_title
+        original.notes = shared_job.notes
+        original.input_value = shared_job.input_value
+        return {"job_id": job_id, "share_id": share_id, "status": "merged"}
 
 
 @router.post("/jobs/{job_id}/checkpoint")
