@@ -8,11 +8,13 @@ from pydantic import BaseModel, EmailStr, Field
 from pwdlib import PasswordHash
 from sqlalchemy import select
 
+
 from app.config import settings
 from app.db import db_session
 from app.models import (
     Correlation, Entity, Finding, Job, MembershipRole, Organization,
     OrganizationMembership, Relationship, User, UserRole, InvestigationShare,
+    EntityRegistrationRequest,
 )
 
 auth_router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
@@ -35,6 +37,17 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=1024)
     global_role: str = "investigator"
+
+
+class EntityRegistrationCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=1024)
+    organization_name: str = Field(min_length=2, max_length=200)
+    organization_slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+class EntityRequestDecision(BaseModel):
+    rejection_reason: str | None = Field(default=None, max_length=2000)
 
 
 class UserResponse(BaseModel):
@@ -124,7 +137,7 @@ def me(user: User = Depends(get_current_user)):
 
 @auth_router.post("/register", response_model=TokenResponse, status_code=201)
 def register(payload: RegisterRequest):
-    """Create a personal account; public registration can never grant admin."""
+    """Create a personal account; elevated roles require explicit verification."""
     _secret()
     if payload.global_role not in {UserRole.investigator.value, UserRole.user.value}:
         raise HTTPException(status_code=422, detail="Registration role must be investigator or user")
@@ -142,6 +155,39 @@ def register(payload: RegisterRequest):
         session.flush()
         token, ttl = create_access_token(user)
         return TokenResponse(access_token=token, expires_in=ttl)
+
+
+@auth_router.post("/register-entity", status_code=202)
+def register_entity(payload: EntityRegistrationCreateRequest):
+    """Record a pending entity account request; it grants no login or privileges."""
+    _secret()
+    email = str(payload.email).strip().lower()
+    slug = payload.organization_slug.strip().lower()
+    with db_session() as session:
+        if session.scalar(select(User).where(User.email == email)):
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        if session.scalar(select(EntityRegistrationRequest.id).where(
+            EntityRegistrationRequest.email == email,
+            EntityRegistrationRequest.status == "pending",
+        )):
+            raise HTTPException(status_code=409, detail="There is already a pending request for this email")
+        if session.scalar(select(Organization.id).where(Organization.slug == slug)):
+            raise HTTPException(status_code=409, detail="This organization identifier is already in use")
+        if session.scalar(select(EntityRegistrationRequest.id).where(
+            EntityRegistrationRequest.organization_slug == slug,
+            EntityRegistrationRequest.status == "pending",
+        )):
+            raise HTTPException(status_code=409, detail="There is already a pending request for this organization identifier")
+        item = EntityRegistrationRequest(
+            email=email,
+            password_hash=hash_password(payload.password),
+            organization_name=payload.organization_name.strip(),
+            organization_slug=slug,
+            status="pending",
+        )
+        session.add(item)
+        session.flush()
+        return {"request_id": item.id, "status": item.status, "message": "Solicitud recibida. La cuenta se habilitará solo después de la verificación administrativa."}
 
 
 def authorize_api_request(request: Request, user: User = Depends(get_current_user)) -> None:
@@ -275,7 +321,9 @@ organization_router = APIRouter(
 def admin_create_user(payload: AdminUserCreateRequest, request: Request):
     # The central dependency guarantees only superusers can pass admin paths.
     role = payload.global_role
-    if role not in {item.value for item in UserRole}:
+    if role == UserRole.superuser.value:
+        raise HTTPException(status_code=403, detail="The platform administrator is unique and cannot be created from this endpoint")
+    if role not in {item.value for item in UserRole if item != UserRole.superuser}:
         raise HTTPException(status_code=422, detail="Invalid global role")
     email = str(payload.email).lower()
     with db_session() as session:
@@ -285,6 +333,91 @@ def admin_create_user(payload: AdminUserCreateRequest, request: Request):
         session.add(user)
         session.flush()
         return UserResponse(id=user.id, email=user.email, global_role=user.global_role.value, is_active=user.is_active)
+
+
+@admin_router.get("/entity-requests")
+def list_entity_registration_requests():
+    """List pending entity requests for the sole platform administrator."""
+    with db_session() as session:
+        rows = session.scalars(
+            select(EntityRegistrationRequest)
+            .where(EntityRegistrationRequest.status == "pending")
+            .order_by(EntityRegistrationRequest.requested_at.asc())
+        ).all()
+        return [{
+            "id": row.id,
+            "email": row.email,
+            "organization_name": row.organization_name,
+            "organization_slug": row.organization_slug,
+            "requested_at": row.requested_at,
+            "status": row.status,
+        } for row in rows]
+
+
+@admin_router.post("/entity-requests/{request_id}/approve", status_code=201)
+def approve_entity_registration_request(request_id: str, request: Request):
+    """Atomically create the verified entity account and organization after review."""
+    administrator_id = request.state.current_user_id
+    with db_session() as session:
+        item = session.scalar(
+            select(EntityRegistrationRequest)
+            .where(EntityRegistrationRequest.id == request_id)
+            .with_for_update()
+        )
+        if not item:
+            raise HTTPException(status_code=404, detail="Entity registration request not found")
+        if item.status != "pending":
+            raise HTTPException(status_code=409, detail="This request has already been reviewed")
+        if session.scalar(select(User.id).where(User.email == item.email)):
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        if session.scalar(select(Organization.id).where(Organization.slug == item.organization_slug)):
+            raise HTTPException(status_code=409, detail="This organization identifier is already in use; review it separately")
+        now = datetime.now(timezone.utc)
+        user = User(email=item.email, password_hash=item.password_hash, global_role=UserRole.entity, is_active=True)
+        session.add(user)
+        session.flush()
+        org = Organization(
+            name=item.organization_name,
+            slug=item.organization_slug,
+            contact_email=user.email,
+            verified_at=now,
+            verified_by_user_id=administrator_id,
+            created_by_user_id=administrator_id,
+            is_active=True,
+        )
+        session.add(org)
+        session.flush()
+        session.add(OrganizationMembership(
+            organization_id=org.id, user_id=user.id, role=MembershipRole.entity, is_active=True
+        ))
+        item.status = "approved"
+        item.reviewed_at = now
+        item.reviewed_by_user_id = administrator_id
+        item.organization_id = org.id
+        item.rejection_reason = None
+        session.flush()
+        return {"request_id": item.id, "status": item.status, "email": user.email, "organization_id": org.id, "organization_name": org.name, "verified_by_user_id": administrator_id}
+
+
+@admin_router.post("/entity-requests/{request_id}/reject")
+def reject_entity_registration_request(request_id: str, payload: EntityRequestDecision, request: Request):
+    """Reject a pending request without creating an account or organization."""
+    administrator_id = request.state.current_user_id
+    with db_session() as session:
+        item = session.scalar(
+            select(EntityRegistrationRequest)
+            .where(EntityRegistrationRequest.id == request_id)
+            .with_for_update()
+        )
+        if not item:
+            raise HTTPException(status_code=404, detail="Entity registration request not found")
+        if item.status != "pending":
+            raise HTTPException(status_code=409, detail="This request has already been reviewed")
+        item.status = "rejected"
+        item.reviewed_at = datetime.now(timezone.utc)
+        item.reviewed_by_user_id = administrator_id
+        item.rejection_reason = (payload.rejection_reason or "").strip() or None
+        return {"request_id": item.id, "status": item.status}
 
 
 @admin_router.post("/organizations", status_code=201)
