@@ -475,6 +475,7 @@ def list_jobs(request: Request):
                 JobResponse(
                     id=job.id,
                     is_owner=(job.owner_user_id == user_id),
+                    is_shared=(session.scalar(select(InvestigationShare.id).where(InvestigationShare.shared_job_id == job.id)) is not None),
                     input_value=job.input_value,
                     investigation_title=job.investigation_title,
                     notes=job.notes,
@@ -866,6 +867,7 @@ def get_job(
         return JobResponse(
             id=job.id,
             is_owner=(job.owner_user_id == request.state.current_user_id),
+            is_shared=(session.scalar(select(InvestigationShare.id).where(InvestigationShare.shared_job_id == job.id)) is not None),
             input_value=job.input_value,
             investigation_title=job.investigation_title,
             notes=job.notes,
