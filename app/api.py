@@ -758,10 +758,13 @@ def create_entity(job_id: str, payload: EntityCreateRequest):
 def update_entity(entity_id: str, payload: EntityUpdateRequest):
     with db_session() as session:
         repo = Repository(session)
+        job_id = session.scalar(select(Entity.job_id).where(Entity.id == entity_id))
+        if not job_id:
+            raise HTTPException(status_code=404, detail="entity not found")
+        _lock_job_for_mutation(session, job_id)
         entity = repo.get_entity(entity_id)
         if not entity:
             raise HTTPException(status_code=404, detail="entity not found")
-        _lock_job_for_mutation(session, entity.job_id)
         repo.update_entity(
             entity,
             label=payload.label,
@@ -832,13 +835,16 @@ def get_entity_profile(entity_id: str):
 def attach_finding(entity_id: str, payload: EntityFindingAttachRequest):
     with db_session() as session:
         repo = Repository(session)
+        job_id = session.scalar(select(Entity.job_id).where(Entity.id == entity_id))
+        if not job_id:
+            raise HTTPException(status_code=404, detail="entity not found")
+        _lock_job_for_mutation(session, job_id)
         entity = repo.get_entity(entity_id)
         finding = repo.get_finding(payload.finding_id)
         if not entity:
             raise HTTPException(status_code=404, detail="entity not found")
         if not finding:
             raise HTTPException(status_code=404, detail="finding not found")
-        _lock_job_for_mutation(session, entity.job_id)
         try:
             repo.attach_finding_to_entity(entity, finding, role=payload.role)
             session.commit()
@@ -897,10 +903,13 @@ def create_relationship(job_id: str, payload: RelationshipCreateRequest):
 def update_relationship(relationship_id: str, payload: RelationshipUpdateRequest):
     with db_session() as session:
         repo = Repository(session)
+        job_id = session.scalar(select(Relationship.job_id).where(Relationship.id == relationship_id))
+        if not job_id:
+            raise HTTPException(status_code=404, detail="relationship not found")
+        _lock_job_for_mutation(session, job_id)
         relationship = session.get(Relationship, relationship_id)
         if not relationship:
             raise HTTPException(status_code=404, detail="relationship not found")
-        _lock_job_for_mutation(session, relationship.job_id)
         try:
             repo.update_relationship(
                 relationship,
@@ -937,10 +946,13 @@ def get_relationships(job_id: str):
 def assess_relationship(relationship_id: str, payload: RelationshipAssessmentRequest):
     with db_session() as session:
         repo = Repository(session)
+        job_id = session.scalar(select(Relationship.job_id).where(Relationship.id == relationship_id))
+        if not job_id:
+            raise HTTPException(status_code=404, detail="relationship not found")
+        _lock_job_for_mutation(session, job_id)
         relationship = session.get(Relationship, relationship_id)
         if not relationship:
             raise HTTPException(status_code=404, detail="relationship not found")
-        _lock_job_for_mutation(session, relationship.job_id)
         repo.assess_relationship(
             relationship,
             assessment=payload.assessment,
@@ -965,15 +977,17 @@ def assess_correlation(
 ):
     with db_session() as session:
         repo = Repository(session)
-        correlation = session.get(Correlation, correlation_id)
-
-        if not correlation:
+        job_id = session.scalar(select(Correlation.job_id).where(Correlation.id == correlation_id))
+        if not job_id:
             raise HTTPException(
                 status_code=404,
                 detail="correlation not found",
             )
 
-        _lock_job_for_mutation(session, correlation.job_id)
+        _lock_job_for_mutation(session, job_id)
+        correlation = session.get(Correlation, correlation_id)
+        if not correlation:
+            raise HTTPException(status_code=404, detail="correlation not found")
         updated = repo.assess_correlation(
             correlation,
             assessment=payload.assessment,
@@ -997,18 +1011,17 @@ def assess_finding(
 ):
     with db_session() as session:
         repo = Repository(session)
-
-        finding = repo.get_finding(
-            finding_id
-        )
-
-        if not finding:
+        job_id = session.scalar(select(Finding.job_id).where(Finding.id == finding_id))
+        if not job_id:
             raise HTTPException(
                 status_code=404,
                 detail="finding not found",
             )
 
-        _lock_job_for_mutation(session, finding.job_id)
+        _lock_job_for_mutation(session, job_id)
+        finding = repo.get_finding(finding_id)
+        if not finding:
+            raise HTTPException(status_code=404, detail="finding not found")
         updated = repo.assess_finding(
             finding,
             identity_assessment=payload.identity_assessment,
