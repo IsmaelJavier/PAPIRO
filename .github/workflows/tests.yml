@@ -32,7 +32,7 @@ jobs:
                   output.write_text(script, encoding="utf-8")
                   print(f"Checking {html_path} inline script {index}")
           PY
-          for script in /tmp/index-*.js /tmp/graph-*.js; do node --check "$script"; done
+          for script in /tmp/*.js; do node --check "$script"; done
       - name: Run tests
         env:
           AUTH_SECRET_KEY: "test-only-secret-key-at-least-32-characters"
