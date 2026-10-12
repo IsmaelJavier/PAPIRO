@@ -195,6 +195,15 @@ def _restore_investigation_snapshot(session, job_id, snapshot):
             session.execute(insert(table).values(**row))
 
 
+def _lock_job_for_mutation(session, job_id):
+    """Serialize every investigation write against checkpoint restoration."""
+    exists = session.scalar(
+        select(Job.id).where(Job.id == job_id).with_for_update()
+    )
+    if not exists:
+        raise HTTPException(status_code=404, detail="job not found")
+
+
 def _require_investigator_job(session, job_id, user_id):
     job = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
     if not job:
@@ -724,6 +733,7 @@ def get_graph(job_id: str):
 )
 def create_entity(job_id: str, payload: EntityCreateRequest):
     with db_session() as session:
+        _lock_job_for_mutation(session, job_id)
         repo = Repository(session)
         if not repo.get_job(job_id):
             raise HTTPException(status_code=404, detail="job not found")
@@ -751,6 +761,7 @@ def update_entity(entity_id: str, payload: EntityUpdateRequest):
         entity = repo.get_entity(entity_id)
         if not entity:
             raise HTTPException(status_code=404, detail="entity not found")
+        _lock_job_for_mutation(session, entity.job_id)
         repo.update_entity(
             entity,
             label=payload.label,
@@ -827,6 +838,7 @@ def attach_finding(entity_id: str, payload: EntityFindingAttachRequest):
             raise HTTPException(status_code=404, detail="entity not found")
         if not finding:
             raise HTTPException(status_code=404, detail="finding not found")
+        _lock_job_for_mutation(session, entity.job_id)
         try:
             repo.attach_finding_to_entity(entity, finding, role=payload.role)
             session.commit()
@@ -843,6 +855,7 @@ def attach_finding(entity_id: str, payload: EntityFindingAttachRequest):
 )
 def create_relationship(job_id: str, payload: RelationshipCreateRequest):
     with db_session() as session:
+        _lock_job_for_mutation(session, job_id)
         repo = Repository(session)
         if not repo.get_job(job_id):
             raise HTTPException(status_code=404, detail="job not found")
@@ -887,6 +900,7 @@ def update_relationship(relationship_id: str, payload: RelationshipUpdateRequest
         relationship = session.get(Relationship, relationship_id)
         if not relationship:
             raise HTTPException(status_code=404, detail="relationship not found")
+        _lock_job_for_mutation(session, relationship.job_id)
         try:
             repo.update_relationship(
                 relationship,
@@ -926,6 +940,7 @@ def assess_relationship(relationship_id: str, payload: RelationshipAssessmentReq
         relationship = session.get(Relationship, relationship_id)
         if not relationship:
             raise HTTPException(status_code=404, detail="relationship not found")
+        _lock_job_for_mutation(session, relationship.job_id)
         repo.assess_relationship(
             relationship,
             assessment=payload.assessment,
@@ -958,6 +973,7 @@ def assess_correlation(
                 detail="correlation not found",
             )
 
+        _lock_job_for_mutation(session, correlation.job_id)
         updated = repo.assess_correlation(
             correlation,
             assessment=payload.assessment,
@@ -992,6 +1008,7 @@ def assess_finding(
                 detail="finding not found",
             )
 
+        _lock_job_for_mutation(session, finding.job_id)
         updated = repo.assess_finding(
             finding,
             identity_assessment=payload.identity_assessment,
