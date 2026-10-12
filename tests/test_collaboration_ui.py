@@ -671,3 +671,101 @@ def test_investigation_workspace_exposes_review_before_merge_controls():
     assert "Revisar cambios" in response.text
     assert "Marcar esta versión como revisada" in response.text
     assert "Pendiente de revisión" in response.text
+
+
+
+def test_three_way_merge_preserves_non_overlapping_owner_and_collaborator_changes(monkeypatch):
+    from contextlib import contextmanager
+    from fastapi import FastAPI, Request
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app import api
+    from app.db import Base
+    from app.models import Job, JobStatus, User, UserRole
+
+    engine = create_engine("sqlite+pysqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    owner = User(email="merge-owner@example.com", password_hash="test", global_role=UserRole.investigator)
+    collaborator = User(email="merge-collab@example.com", password_hash="test", global_role=UserRole.investigator)
+    session.add_all([owner, collaborator]); session.flush()
+    original = Job(input_value="base", investigation_title="base title", notes=None, input_type="investigation", status=JobStatus.draft, owner_user_id=owner.id)
+    session.add(original); session.flush()
+    original_id = original.id
+
+    @contextmanager
+    def fake_db_session():
+        yield session
+
+    def fake_auth(request: Request):
+        request.state.current_user_id = owner.id
+    monkeypatch.setattr(api, "db_session", fake_db_session)
+    test_app = FastAPI(); test_app.include_router(api.router)
+    test_app.dependency_overrides[api.authorize_api_request] = fake_auth
+    with TestClient(test_app) as client:
+        created = client.post(f"/api/v1/jobs/{original_id}/shares", json={"email": collaborator.email, "permission": "edit"})
+        assert created.status_code == 201, created.text
+        share_id = created.json()["share_id"]
+        share = session.get(api.InvestigationShare, share_id)
+        copy = session.get(Job, share.shared_job_id)
+        original.notes = "owner-only notes change"
+        copy.investigation_title = "collaborator title change"
+        session.flush()
+        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review").status_code == 200
+        merged = client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/merge")
+        assert merged.status_code == 200, merged.text
+        refreshed_original = session.get(Job, original_id)
+        refreshed_copy = session.get(Job, share.shared_job_id)
+        assert refreshed_original.notes == "owner-only notes change"
+        assert refreshed_original.investigation_title == "collaborator title change"
+        assert refreshed_copy.notes == "owner-only notes change"
+        assert refreshed_copy.investigation_title == "collaborator title change"
+        assert merged.json()["branch_synchronized"] is True
+    session.close(); engine.dispose()
+
+
+def test_three_way_merge_rejects_conflicting_edits(monkeypatch):
+    from contextlib import contextmanager
+    from fastapi import FastAPI, Request
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app import api
+    from app.db import Base
+    from app.models import Job, JobStatus, User, UserRole
+
+    engine = create_engine("sqlite+pysqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    owner = User(email="conflict-owner@example.com", password_hash="test", global_role=UserRole.investigator)
+    collaborator = User(email="conflict-collab@example.com", password_hash="test", global_role=UserRole.investigator)
+    session.add_all([owner, collaborator]); session.flush()
+    original = Job(input_value="base", investigation_title="base", notes="same base", input_type="investigation", status=JobStatus.draft, owner_user_id=owner.id)
+    session.add(original); session.flush()
+    original_id = original.id
+
+    @contextmanager
+    def fake_db_session():
+        yield session
+
+    def fake_auth(request: Request):
+        request.state.current_user_id = owner.id
+    monkeypatch.setattr(api, "db_session", fake_db_session)
+    test_app = FastAPI(); test_app.include_router(api.router)
+    test_app.dependency_overrides[api.authorize_api_request] = fake_auth
+    with TestClient(test_app) as client:
+        created = client.post(f"/api/v1/jobs/{original_id}/shares", json={"email": collaborator.email, "permission": "edit"})
+        assert created.status_code == 201, created.text
+        share_id = created.json()["share_id"]
+        share = session.get(api.InvestigationShare, share_id)
+        copy = session.get(Job, share.shared_job_id)
+        original.notes = "owner version"
+        copy.notes = "collaborator version"
+        session.flush()
+        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review").status_code == 200
+        response = client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/merge")
+        assert response.status_code == 409, response.text
+        assert "conflicts" in response.json()["detail"]
+        assert session.get(Job, original_id).notes == "owner version"
+    session.close(); engine.dispose()
