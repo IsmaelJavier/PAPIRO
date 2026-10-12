@@ -242,47 +242,52 @@ La interfaz `/ui/job/{JOB_ID}` incorpora ahora:
 Las posiciones y nodos ocultos son preferencias locales del navegador en esta iteración; no modifican la evidencia ni eliminan datos. La persistencia server-side de la vista podrá añadirse posteriormente.
 
 
-## Identidad y autorización (incremento en revisión)
+## Identidad, entidades y autorización
 
-La rama `feature/identity-authorization` introduce la base de identidad y autorización sin modificar la lógica de recolección OSINT, normalización, correlación ni reconstrucción del grafo.
+La rama `feature/identity-authorization` incorpora autenticación y autorización por recurso, colaboración mediante copias independientes y gestión de entidades institucionales. No modifica la lógica de recolección OSINT, normalización, correlación ni reconstrucción del grafo.
 
-### Política
+### Política de acceso
 
-- Cada investigación nueva tiene un usuario responsable.
-- Una investigación personal no tiene `organization_id`; una investigación organizativa tiene usuario responsable y organización.
-- Los investigadores pueden leer y modificar sus propias investigaciones.
-- El rol organizativo `entity` puede leer las investigaciones de su organización y gestionar membresías, pero no modificar el contenido de las investigaciones ni lanzar búsquedas.
-- Los investigadores de una organización no ven por defecto las investigaciones de otros investigadores.
-- `superuser` tiene acceso administrativo global.
-- Las cuentas no se crean mediante registro público.
+- Las investigaciones personales tienen un investigador responsable.
+- Una investigación organizativa tiene un responsable y un `organization_id`.
+- Los investigadores solo consultan y modifican sus propias investigaciones, salvo una copia que les haya sido compartida explícitamente.
+- Las cuentas con rol global `entity` pueden consultar las investigaciones de su organización y administrar las membresías de investigadores, pero no modificar ni eliminar el contenido de las investigaciones.
+- Un investigador no obtiene acceso a los expedientes de sus compañeros solo por pertenecer a la misma organización.
+- `superuser` conserva el acceso administrativo global.
+- El registro público solo permite `investigator` y `user`. Una cuenta no puede asignarse a sí misma el rol `entity`.
 
-### Configuración inicial local
+### Configuración y migraciones
 
-1. Copia `.env.example` a `.env`.
-2. Establece `AUTH_SECRET_KEY` con un secreto aleatorio de al menos 32 caracteres; no uses el valor de ejemplo.
-3. Arranca los servicios con `docker compose up --build -d`.
-4. Haz una copia de seguridad de PostgreSQL y confirma que las migraciones 002 y 003 están aplicadas.
-5. Aplica la migración 004: `docker compose exec api python -m scripts.apply_identity_migration`.
-6. Crea el primer administrador de forma interactiva: `docker compose exec -it api python -m scripts.bootstrap_superuser`.
-7. Abre `http://127.0.0.1:8000/ui` para usar el panel web de inicio de sesión/registro y crear una investigación personal. También puedes abrir `http://127.0.0.1:8000/docs` para usar la API interactiva.
-8. Las cuentas también pueden crearse desde el panel web. Para cuentas administrativas o asignaciones de organización, utiliza los endpoints de administración con una cuenta autorizada; las contraseñas deben tener al menos 12 caracteres.
+1. Copia `.env.example` a `.env` y establece `AUTH_SECRET_KEY` con un secreto aleatorio de al menos 32 caracteres.
+2. Haz una copia de seguridad de PostgreSQL y confirma que las migraciones 002 y 003 están aplicadas.
+3. Aplica la migración 004 con `docker compose exec api python -m scripts.apply_identity_migration`.
+4. Aplica las migraciones de colaboración y entidades, en este orden:
+   ```bash
+   cat migrations/006_investigation_sharing.sql | docker compose exec -T postgres psql -U kami -d kami_eye
+   cat migrations/007_entity_accounts_and_verification.sql | docker compose exec -T postgres psql -U kami -d kami_eye
+   ```
+5. Crea el primer administrador de forma interactiva: `docker compose exec -it api python -m scripts.bootstrap_superuser`.
+6. Abre `http://127.0.0.1:8000/ui`. Las cuentas de investigador y público pueden registrarse; las cuentas de entidad y administración deben crearse desde el panel administrativo.
 
-No borres el volumen de PostgreSQL para resolver errores de migración. Los trabajos históricos sin propietario no se asignan automáticamente.
+Las migraciones 004, 006 y 007 son idempotentes y no requieren eliminar volúmenes. Los trabajos históricos sin propietario no se asignan automáticamente: deben auditarse y reasignarse explícitamente.
 
-### Organizaciones
+### Alta de una entidad institucional
 
-- `POST /api/v1/organizations`: crear organización. El creador comienza como gestor de membresías (`entity`).
-- `GET /api/v1/organizations/{organization_id}/members`: listar miembros.
-- `POST /api/v1/organizations/{organization_id}/members`: añadir un usuario ya existente con rol `entity` o `investigator`.
-- `DELETE /api/v1/organizations/{organization_id}/members/{user_id}`: desactivar una membresía, sin borrar el usuario ni sus investigaciones.
-- Para crear una investigación organizativa, enviar `organization_id` en `POST /api/v1/ingest/name`; el usuario debe tener membresía activa con rol `investigator`.
+1. En el panel administrativo, crea una cuenta con rol **Entidad verificada**.
+2. Verifica la identidad institucional fuera de la plataforma.
+3. Registra la entidad usando su identificador único y el correo de esa cuenta. El sistema guarda el correo de contacto, la fecha de verificación y el administrador responsable.
+4. Inicia sesión con la cuenta de entidad para consultar las investigaciones de la organización y administrar las membresías.
 
-### Migración de datos existentes
+La verificación institucional es una operación administrativa; no implica verificación automática del dominio ni envío de un correo de confirmación. No se debe conceder el rol de entidad sin comprobar la identidad por un canal fiable.
 
-La migración 004 deja `jobs.owner_user_id` nullable de manera intencional. Los trabajos históricos no se asignan automáticamente al primer administrador porque eso inventaría una autoría. Hasta su reasignación auditada, no estarán disponibles para usuarios normales. No elimines el volumen de PostgreSQL. La política y la secuencia de transición están documentadas en `docs/identity-authorization.md`.
+Los responsables de entidad pueden añadir cuentas existentes de investigador y retirar sus membresías. No pueden convertir otras cuentas en entidades ni eliminar al último responsable activo. Para crear una investigación organizativa, el investigador selecciona la organización a la que pertenece en el formulario de nueva investigación.
+
+### Colaboración entre investigadores
+
+Compartir una investigación crea una copia independiente con permiso de lectura, lectura y comentarios, o edición. Los cambios de la copia no alteran el original hasta que el responsable incorpora la copia mediante el proceso de merge; si el original cambió desde la creación de la copia, el merge se rechaza para evitar sobrescrituras.
 
 ### Importante antes de producción
 
-- La interfaz del grafo incluye un formulario básico de inicio/cierre de sesión y envía el bearer token a la API. El token se almacena en `localStorage`; antes de producción conviene valorar una cookie `HttpOnly` y añadir protección contra fuerza bruta.
-- CI ejecuta pruebas unitarias y una prueba de humo de la migración sobre PostgreSQL limpio, incluida una segunda ejecución para comprobar idempotencia. Aún no se ha probado contra la base real de la instalación; haz copia de seguridad antes de aplicarla.
-- Se eliminó `.env` del árbol de la rama y se añadió `.env.example`; el historial Git anterior aún puede conservar versiones del archivo. Si contenía credenciales reales, rótalas y sanea el historial antes de hacer pública o compartir la rama.
+- La UI del grafo almacena el bearer token en `localStorage`; antes de producción conviene valorar una cookie `HttpOnly` y añadir protección contra fuerza bruta.
+- CI ejecuta las pruebas de Python, comprobaciones de sintaxis JavaScript y una prueba de humo de migraciones sobre PostgreSQL, incluidas segundas ejecuciones para comprobar idempotencia. Antes de desplegar, prueba las migraciones sobre una copia de la base real.
+- El historial Git puede conservar versiones antiguas de `.env`. Si contuvo credenciales reales, rótalas y sanea el historial antes de compartir la rama.
