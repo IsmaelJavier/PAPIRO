@@ -104,11 +104,15 @@
     <div class="header-actions">
       <span id="saveStatus" role="status" aria-live="polite">Guardado automático activo</span>
       <a id="workspaceLink" href="/ui/workspace">Espacio de trabajo</a>
+      <button id="shareInvestigationBtn" type="button">Compartir</button>
+      <button id="mergeInvestigationBtn" type="button">Pull / Merge</button>
       <button id="saveExitBtn" type="button">Guardar y salir</button>
       <button id="authBtn" type="button">Cerrar sesión</button>
       <button id="reloadBtn" type="button">Actualizar</button>
     </div>
   </header>
+  <div class="modal-backdrop" id="shareInvestigationModal" role="dialog" aria-modal="true"><div class="modal"><header><h2>Compartir investigación</h2><button class="btn small" type="button" onclick="closeModal('shareInvestigationModal')">Cerrar</button></header><div class="modal-body"><p>Se creará una copia independiente para el investigador invitado. Los cambios no alteran el original hasta que los incorpores.</p><form id="shareInvestigationForm"><div class="field"><label for="shareEmail">Correo del investigador</label><input id="shareEmail" type="email" maxlength="320" required></div><div class="field"><label for="sharePermission">Permisos</label><select id="sharePermission"><option value="read">Lectura</option><option value="comment">Lectura y comentarios</option><option value="edit">Edición y comentarios</option></select></div><p class="error" id="shareError" role="alert"></p><p id="shareResult" role="status"></p><div class="modal-footer"><button class="btn primary" type="submit" id="shareSubmitBtn">Crear copia compartida</button></div></form></div></div></div>
+  <div class="modal-backdrop" id="mergeInvestigationModal" role="dialog" aria-modal="true"><div class="modal"><header><h2>Pull y merge de copias</h2><button class="btn small" type="button" onclick="closeModal('mergeInvestigationModal')">Cerrar</button></header><div class="modal-body"><p>El merge reemplaza el contenido de la investigación original con el de la copia seleccionada solo si el original no cambió desde que se compartió. Si hubo cambios, se rechaza para evitar sobrescribirlos.</p><div id="sharedCopiesList">Cargando copias…</div><p class="error" id="mergeError" role="alert"></p></div></div></div>
   <div class="layout">
     <aside class="panel left">
       <section class="section">
