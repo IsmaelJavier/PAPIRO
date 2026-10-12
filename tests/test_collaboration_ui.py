@@ -111,6 +111,8 @@ def test_read_only_shared_copy_can_exit_without_checkpoint_or_restore():
     assert "if(readOnlySession||!checkpointReady){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}" in html
     # Editing remains unavailable in the UI; server-side authorization remains authoritative.
     assert "activateReadOnlyMode" in html
+    assert "if(job?.can_edit===false){activateReadOnlyMode();return true;}" in html
+    assert "Acceso de solo lectura" in html
     assert "assessFinding|assessRelationship|assessCorrelation|saveEntity|saveRelationship|openEntityEdit|openRelationshipEdit|attachSelectedFindingsToEntity" in html
     from pathlib import Path
     auth_source = (Path(__file__).resolve().parents[1] / "app" / "auth.py").read_text(encoding="utf-8")
@@ -443,6 +445,7 @@ def test_job_listing_exposes_org_investigations_only_to_entity_managers(monkeypa
             assert visible.status_code == 200
             assert len(visible.json()) == 1
             assert visible.json()[0]["investigation_title"] == "Org investigation"
+            assert visible.json()[0]["can_edit"] is False
     finally:
         session.close()
         engine.dispose()
