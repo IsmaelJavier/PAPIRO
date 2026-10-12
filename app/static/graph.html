@@ -255,7 +255,8 @@
         <div class="modal-footer"><button class="btn primary" type="submit" id="loginSubmitBtn">Entrar</button></div>
       </form>
       <form id="registerForm" hidden>
-        <p class="notice">Crea una cuenta de investigador. La contraseña debe tener al menos 12 caracteres. Las cuentas nuevas comienzan con investigaciones personales; el acceso a organizaciones requiere invitación de un administrador de esa organización.</p>
+        <p class="notice">Elige el perfil de uso. El rol administrador solo puede asignarse desde la administración del sistema.</p>
+        <div class="field"><label for="registerRole">Tipo de cuenta</label><select id="registerRole" required><option value="investigator">Investigador — crear y gestionar investigaciones</option><option value="user">Público — acceso limitado, sin funciones adicionales por ahora</option></select></div>
         <div class="field"><label for="registerEmail">Correo electrónico</label><input id="registerEmail" type="email" autocomplete="email" required maxlength="320"></div>
         <div class="field"><label for="registerPassword">Contraseña (mínimo 12 caracteres)</label><input id="registerPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="1024"></div>
         <div class="field"><label for="registerPasswordConfirm">Confirmar contraseña</label><input id="registerPasswordConfirm" type="password" autocomplete="new-password" required minlength="12" maxlength="1024"></div>
@@ -346,7 +347,7 @@ async function submitRegister(event){
   try{
     const response = await fetch(`${API}/auth/register`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:document.getElementById('registerEmail').value.trim(),password})
+      body:JSON.stringify({email:document.getElementById('registerEmail').value.trim(),password,global_role:document.getElementById('registerRole').value})
     });
     let data = null; try{data=await response.json()}catch{}
     if(!response.ok) throw new Error(data?.detail || `HTTP ${response.status}`);
