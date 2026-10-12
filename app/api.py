@@ -635,6 +635,7 @@ def restore_investigation_checkpoint(job_id: str, request: Request):
 )
 def get_job(
     job_id: str,
+    request: Request,
 ):
     with db_session() as session:
         repo = Repository(session)
