@@ -21,3 +21,16 @@ def test_investigation_workspace_exposes_share_and_merge_controls():
     assert 'id="mergeInvestigationBtn"' in response.text
     assert 'id="sharePermission"' in response.text
     assert "/shares/" in response.text
+
+def test_collaboration_and_deletion_routes_are_registered():
+    from app.main import app
+
+    routes = {
+        (route.path, method)
+        for route in app.routes
+        for method in (getattr(route, "methods", None) or set())
+    }
+    assert ("/api/v1/jobs/{job_id}", "DELETE") in routes
+    assert ("/api/v1/jobs/{job_id}/shares", "POST") in routes
+    assert ("/api/v1/jobs/{job_id}/shares/{share_id}/merge", "POST") in routes
+    assert ("/api/v1/shares/{share_id}/comments", "POST") in routes
