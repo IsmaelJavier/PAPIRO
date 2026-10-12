@@ -70,10 +70,12 @@ jobs:
         run: |
           psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -f migrations/004_identity_and_authorization.sql
           psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -f migrations/004_identity_and_authorization.sql
+          psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -f migrations/006_investigation_sharing.sql
+          psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -f migrations/006_investigation_sharing.sql
       - name: Verify migration schema and legacy data preservation
         env:
           PGPASSWORD: migration-test-password
         run: |
           psql -h 127.0.0.1 -U kami -d kami_eye -v ON_ERROR_STOP=1 -c "SELECT owner_user_id, organization_id FROM jobs WHERE id = 'legacy-job';"
           test "$(psql -h 127.0.0.1 -U kami -d kami_eye -tAc "SELECT count(*) FROM jobs WHERE id = 'legacy-job'")" = "1"
-          test "$(psql -h 127.0.0.1 -U kami -d kami_eye -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('users','organizations','organization_memberships')")" = "3"
+          test "$(psql -h 127.0.0.1 -U kami -d kami_eye -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('users','organizations','organization_memberships','investigation_shares','investigation_comments')")" = "5"
