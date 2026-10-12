@@ -142,6 +142,7 @@ class ModuleRunResponse(BaseModel):
 
 class JobResponse(BaseModel):
     id: str
+    is_owner: bool = False
 
     input_value: str
     investigation_title: str | None = None
