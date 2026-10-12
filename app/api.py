@@ -480,6 +480,15 @@ def list_jobs(request: Request):
                     id=job.id,
                     is_owner=(job.owner_user_id == user_id),
                     is_shared=(session.scalar(select(InvestigationShare.id).where(InvestigationShare.shared_job_id == job.id)) is not None),
+                    can_edit=bool(
+                        actor
+                        and actor.global_role not in {UserRole.user, UserRole.entity}
+                        and job.owner_user_id == user_id
+                        and (
+                            (share := session.scalar(select(InvestigationShare).where(InvestigationShare.shared_job_id == job.id))) is None
+                            or share.permission == "edit"
+                        )
+                    ),
                     input_value=job.input_value,
                     investigation_title=job.investigation_title,
                     notes=job.notes,
@@ -889,10 +898,20 @@ def get_job(
             or 0
         )
 
+        user_id = request.state.current_user_id
+        actor = session.get(User, user_id)
+        share = session.scalar(select(InvestigationShare).where(InvestigationShare.shared_job_id == job.id))
+        can_edit = bool(
+            actor
+            and actor.global_role not in {UserRole.user, UserRole.entity}
+            and job.owner_user_id == user_id
+            and (share is None or share.permission == "edit")
+        )
         return JobResponse(
             id=job.id,
-            is_owner=(job.owner_user_id == request.state.current_user_id),
-            is_shared=(session.scalar(select(InvestigationShare.id).where(InvestigationShare.shared_job_id == job.id)) is not None),
+            is_owner=(job.owner_user_id == user_id),
+            is_shared=(share is not None),
+            can_edit=can_edit,
             input_value=job.input_value,
             investigation_title=job.investigation_title,
             notes=job.notes,
