@@ -154,18 +154,17 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
         actor = session.get(User, user.id)
         if not actor or not actor.is_active:
             raise HTTPException(status_code=401, detail="Inactive account")
-        if actor.global_role == UserRole.superuser:
-            return
-
-        # Organization identity is a privileged provisioning operation.
-        # Letting any investigator create an organization and automatically
-        # become its entity manager would let users self-assign that capability.
-        # Verified organizations are provisioned through /api/v1/admin/organizations.
+        # Disable the legacy self-service organization route for every role,
+        # including superusers. Provisioning must go through the audited admin path.
         if path == "/api/v1/organizations" and method == "POST":
             raise HTTPException(
                 status_code=403,
                 detail="Organization registration requires verified administrative provisioning",
             )
+        if actor.global_role == UserRole.superuser:
+            return
+
+        # Organization identity is provisioned only through /api/v1/admin/organizations.
         if path.startswith("/api/v1/admin/"):
             raise HTTPException(status_code=403, detail="Superuser role required")
         if "organization_id" in params:
