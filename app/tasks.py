@@ -1,4 +1,5 @@
 import httpx
+from datetime import datetime, timezone
 
 from app.db import db_session
 from app.models import InvestigationCheckpoint, JobStatus, RunStatus
@@ -9,17 +10,33 @@ from app.sources.registry import get_person_name_sources
 from app.worker import celery_app
 
 
-def _discard_requested(session, job_id: str) -> bool:
-    """Workers must stop committing results once an investigator discards a session."""
-    return session.query(InvestigationCheckpoint.id).filter(
+def _capture_checkpoint_guard(session, job_id: str):
+    """Remember the session active at task start, or the start time if none exists."""
+    started_at = datetime.now(timezone.utc)
+    active_id = session.query(InvestigationCheckpoint.id).filter(
         InvestigationCheckpoint.job_id == job_id,
-        InvestigationCheckpoint.status == "restoring",
-    ).first() is not None
+        InvestigationCheckpoint.status == "active",
+    ).order_by(InvestigationCheckpoint.created_at.desc()).first()
+    return (active_id[0] if active_id else None), started_at
+
+
+def _discard_requested(session, job_id: str, checkpoint_id, started_at) -> bool:
+    """Detect discard even if the checkpoint has already reached its terminal state."""
+    query = session.query(InvestigationCheckpoint.id).filter(
+        InvestigationCheckpoint.job_id == job_id,
+        InvestigationCheckpoint.status.in_(("restoring", "discarded")),
+    )
+    if checkpoint_id:
+        query = query.filter(InvestigationCheckpoint.id == checkpoint_id)
+    else:
+        query = query.filter(InvestigationCheckpoint.created_at >= started_at)
+    return query.first() is not None
 
 
 @celery_app.task(name="app.tasks.process_person_name_job")
 def process_person_name_job(job_id: str):
     with db_session() as session:
+        checkpoint_id, task_started_at = _capture_checkpoint_guard(session, job_id)
         repo = Repository(session)
         job = repo.get_job(job_id)
         if not job:
@@ -36,7 +53,7 @@ def process_person_name_job(job_id: str):
         source_errors: list[str] = []
 
         for source in sources:
-            if _discard_requested(session, job_id):
+            if _discard_requested(session, job_id, checkpoint_id, task_started_at):
                 session.rollback()
                 return {"job_id": job_id, "status": "discarded", "cancelled": True}
             run = repo.create_run(
@@ -48,7 +65,7 @@ def process_person_name_job(job_id: str):
 
             try:
                 result = source.search_person_name(job.input_value)
-                if _discard_requested(session, job_id):
+                if _discard_requested(session, job_id, checkpoint_id, task_started_at):
                     session.rollback()
                     return {"job_id": job_id, "status": "discarded", "cancelled": True}
                 for finding, indicators in result.findings:
@@ -137,6 +154,7 @@ def process_manual_person_name_search(job_id: str, query: str):
     existing evidence and no prior assessment/entity is changed.
     """
     with db_session() as session:
+        checkpoint_id, task_started_at = _capture_checkpoint_guard(session, job_id)
         repo = Repository(session)
         job = repo.get_job(job_id)
         if not job:
@@ -148,7 +166,7 @@ def process_manual_person_name_search(job_id: str, query: str):
         errors: list[str] = []
 
         for source in sources:
-            if _discard_requested(session, job_id):
+            if _discard_requested(session, job_id, checkpoint_id, task_started_at):
                 session.rollback()
                 return {"job_id": job_id, "query": query, "status": "discarded", "cancelled": True}
             run = repo.create_run(job.id, source.module_name, source.name, query)
@@ -156,7 +174,7 @@ def process_manual_person_name_search(job_id: str, query: str):
                 # Sources expose the same contract; temporarily build the
                 # canonical input through the source's public name-search API.
                 result = source.search_person_name(query)
-                if _discard_requested(session, job_id):
+                if _discard_requested(session, job_id, checkpoint_id, task_started_at):
                     session.rollback()
                     return {"job_id": job_id, "query": query, "status": "discarded", "cancelled": True}
                 before = len(repo.get_findings(job.id))
