@@ -913,6 +913,9 @@ def review_shared_investigation(job_id: str, share_id: str, request: Request):
             raise HTTPException(status_code=404, detail="Shared investigation not found")
         if share.owner_user_id != user_id:
             raise HTTPException(status_code=403, detail="Only the original investigator can review this proposal")
+        locked_copy = session.scalar(select(Job).where(Job.id == share.shared_job_id).with_for_update())
+        if not locked_copy:
+            raise HTTPException(status_code=404, detail="Shared investigation copy not found")
         current_copy = _make_investigation_snapshot(session, share.shared_job_id)
         normalized_copy = _normalize_shared_snapshot(current_copy, share, share.base_snapshot)
         changes = _investigation_snapshot_diff(share.base_snapshot, normalized_copy)
@@ -938,6 +941,9 @@ def mark_shared_investigation_reviewed(job_id: str, share_id: str, request: Requ
             raise HTTPException(status_code=404, detail="Shared investigation not found")
         if original.owner_user_id != user_id or share.owner_user_id != user_id:
             raise HTTPException(status_code=403, detail="Only the original investigator can review this proposal")
+        locked_copy = session.scalar(select(Job).where(Job.id == share.shared_job_id).with_for_update())
+        if not locked_copy:
+            raise HTTPException(status_code=404, detail="Shared investigation copy not found")
         share.reviewed_snapshot = _make_investigation_snapshot(session, share.shared_job_id)
         share.reviewed_at = datetime.now(timezone.utc)
         session.flush()
@@ -988,6 +994,9 @@ def merge_shared_investigation(job_id: str, share_id: str, request: Request):
             raise HTTPException(status_code=404, detail="Share or original investigation not found")
         if original.owner_user_id != user_id or share.owner_user_id != user_id:
             raise HTTPException(status_code=403, detail="Only the original investigator can merge a shared copy")
+        locked_copy = session.scalar(select(Job).where(Job.id == share.shared_job_id).with_for_update())
+        if not locked_copy:
+            raise HTTPException(status_code=404, detail="Shared investigation copy not found")
         current_copy_snapshot = _make_investigation_snapshot(session, share.shared_job_id)
         if share.reviewed_snapshot is None or current_copy_snapshot != share.reviewed_snapshot:
             raise HTTPException(status_code=409, detail="Review the current collaborator changes before pulling or merging them.")
