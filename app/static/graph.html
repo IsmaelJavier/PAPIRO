@@ -583,23 +583,33 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   document.getElementById('workspaceLink').onclick=e=>{e.preventDefault();leaveToWorkspace();};
   sessionModal.addEventListener('click',e=>{if(e.target===sessionModal)closeSessionModal();});
  });
- document.getElementById('closeLoginBtn').onclick=()=>closeModal('loginModal');
- document.getElementById('showLoginTab').onclick=()=>showAuthTab('login');
- document.getElementById('showRegisterTab').onclick=()=>showAuthTab('register');
- document.getElementById('loginForm').addEventListener('submit',submitLogin);
- document.getElementById('registerForm').addEventListener('submit',submitRegister);
- updateAuthButton();
- (async()=>{
-   const token=localStorage.getItem(TOKEN_KEY);
-   if(!token){location.replace('/ui');return;}
-   try{
-     await api('/auth/me');
-     await loadAll(true);
-   }catch(error){
-     localStorage.removeItem(TOKEN_KEY);
-     location.replace('/ui');
-   }
- })();
+ document.addEventListener('DOMContentLoaded',()=>{
+   // These authentication dialogs are declared after this script in the document.
+   // Bind them only after parsing completes; a null-element exception here used to
+   // abort initialization of the graph's exit and logout controls.
+   const closeLoginBtn=document.getElementById('closeLoginBtn');
+   const showLoginTab=document.getElementById('showLoginTab');
+   const showRegisterTab=document.getElementById('showRegisterTab');
+   const loginForm=document.getElementById('loginForm');
+   const registerForm=document.getElementById('registerForm');
+   if(closeLoginBtn) closeLoginBtn.onclick=()=>closeModal('loginModal');
+   if(showLoginTab) showLoginTab.onclick=()=>showAuthTab('login');
+   if(showRegisterTab) showRegisterTab.onclick=()=>showAuthTab('register');
+   if(loginForm) loginForm.addEventListener('submit',submitLogin);
+   if(registerForm) registerForm.addEventListener('submit',submitRegister);
+   updateAuthButton();
+   (async()=>{
+     const token=localStorage.getItem(TOKEN_KEY);
+     if(!token){location.replace('/ui');return;}
+     try{
+       await api('/auth/me');
+       await loadAll(true);
+     }catch(error){
+       localStorage.removeItem(TOKEN_KEY);
+       location.replace('/ui');
+     }
+   })();
+ });
 </script>
 <div class="session-modal-backdrop" id="sessionModal" role="dialog" aria-modal="true" aria-labelledby="sessionModalTitle">
   <div class="session-modal"><h2 id="sessionModalTitle">¿Cómo deseas salir?</h2>
