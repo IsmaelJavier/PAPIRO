@@ -140,7 +140,12 @@ def test_entity_organization_requires_administrative_provisioning(monkeypatch):
         password_hash="test",
         global_role=UserRole.investigator,
     )
-    session.add(investigator)
+    superuser = User(
+        email="admin@example.com",
+        password_hash="test",
+        global_role=UserRole.superuser,
+    )
+    session.add_all([investigator, superuser])
     session.flush()
 
     @contextmanager
@@ -160,14 +165,15 @@ def test_entity_organization_requires_administrative_provisioning(monkeypatch):
         "path_params": {},
         "root_path": "",
     }
-    request = Request(scope)
     try:
-        try:
-            auth.authorize_api_request(request, investigator)
-            assert False, "Self-service organization creation must be forbidden"
-        except HTTPException as error:
-            assert error.status_code == 403
-            assert "verified administrative provisioning" in error.detail
+        for actor in (investigator, superuser):
+            request = Request(dict(scope))
+            try:
+                auth.authorize_api_request(request, actor)
+                assert False, "Legacy organization creation must be forbidden for every role"
+            except HTTPException as error:
+                assert error.status_code == 403
+                assert "verified administrative provisioning" in error.detail
     finally:
         session.close()
         engine.dispose()
