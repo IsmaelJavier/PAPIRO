@@ -318,6 +318,35 @@ def admin_create_organization(payload: AdminOrganizationCreateRequest):
         }
 
 
+@organization_router.get("")
+def list_organizations(request: Request):
+    """List only organizations in which the authenticated user has an active membership."""
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        rows = session.execute(
+            select(Organization, OrganizationMembership.role)
+            .join(
+                OrganizationMembership,
+                OrganizationMembership.organization_id == Organization.id,
+            )
+            .where(
+                OrganizationMembership.user_id == user_id,
+                OrganizationMembership.is_active.is_(True),
+                Organization.is_active.is_(True),
+            )
+            .order_by(Organization.name.asc())
+        ).all()
+        return [
+            {
+                "id": organization.id,
+                "name": organization.name,
+                "identifier": organization.slug,
+                "role": role.value,
+            }
+            for organization, role in rows
+        ]
+
+
 @organization_router.post("", status_code=201)
 def create_organization(payload: OrganizationCreateRequest, request: Request):
     creator_id = request.state.current_user_id
