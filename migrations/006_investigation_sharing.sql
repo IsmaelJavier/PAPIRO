@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS investigation_shares (
     collaborator_user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     permission VARCHAR(16) NOT NULL CHECK (permission IN ('read', 'comment', 'edit')),
     base_snapshot JSON NOT NULL,
+    id_map JSON NOT NULL DEFAULT '{}'::json,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_investigation_share_collaborator UNIQUE (original_job_id, collaborator_user_id),
     CONSTRAINT ck_investigation_share_not_self CHECK (owner_user_id <> collaborator_user_id)
