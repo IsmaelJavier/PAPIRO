@@ -4,7 +4,7 @@ from app.auth import authorize_api_request
 from sqlalchemy import func, or_, select
 
 from app.db import db_session
-from app.models import Correlation, Entity, Finding, Job, MembershipRole, OrganizationMembership, Relationship
+from app.models import Correlation, Entity, Finding, Job, JobStatus, MembershipRole, OrganizationMembership, Relationship
 from app.repository import Repository
 from app.schemas import (
     CorrelationAssessmentRequest,
@@ -23,6 +23,7 @@ from app.schemas import (
     FindingAssessmentRequest,
     FindingResponse,
     IngestNameRequest,
+    InvestigationCreateRequest,
     JobCreatedResponse,
     JobResponse,
 )
@@ -182,6 +183,44 @@ def ingest_name(
 
 
 @router.post(
+    "/investigations",
+    response_model=JobCreatedResponse,
+    status_code=201,
+)
+def create_investigation(
+    payload: InvestigationCreateRequest,
+    request: Request,
+):
+    """Create a named investigation workspace without launching any search."""
+    title = " ".join(payload.title.split()).strip()
+    notes = (payload.notes or "").strip() or None
+    if not title:
+        raise HTTPException(status_code=422, detail="Investigation title cannot be empty")
+
+    with db_session() as session:
+        organization_id = payload.organization_id
+        if organization_id:
+            membership = session.scalar(select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.user_id == request.state.current_user_id,
+                OrganizationMembership.is_active.is_(True),
+            ))
+            if not membership or membership.role != MembershipRole.investigator:
+                raise HTTPException(status_code=403, detail="Active investigator membership required to create an organizational investigation")
+
+        job = Repository(session).create_job(title, "investigation")
+        job.investigation_title = title
+        job.notes = notes
+        job.status = JobStatus.draft
+        job.owner_user_id = request.state.current_user_id
+        job.organization_id = organization_id
+        job_id = job.id
+
+    # Deliberately do not enqueue process_person_name_job here.
+    return JobCreatedResponse(job_id=job_id, status="draft")
+
+
+@router.post(
     "/jobs/{job_id}/search/name",
     status_code=202,
 )
@@ -225,6 +264,8 @@ def list_jobs(request: Request):
                 JobResponse(
                     id=job.id,
                     input_value=job.input_value,
+                    investigation_title=job.investigation_title,
+                    notes=job.notes,
                     input_type=job.input_type,
                     status=job.status.value,
                     error=job.error,
@@ -289,6 +330,8 @@ def get_job(
         return JobResponse(
             id=job.id,
             input_value=job.input_value,
+            investigation_title=job.investigation_title,
+            notes=job.notes,
             input_type=job.input_type,
             status=job.status.value,
             error=job.error,
