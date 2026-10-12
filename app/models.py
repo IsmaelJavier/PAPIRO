@@ -110,11 +110,16 @@ class OrganizationMembership(Base):
              values_callable=lambda cls: [item.value for item in cls]),
         nullable=False, default=MembershipRole.investigator,
     )
+    # Legacy memberships remain accepted; newly proposed memberships require explicit consent.
+    invitation_status: Mapped[str] = mapped_column(String(16), nullable=False, default="accepted")
+    invited_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
-    user = orm_relationship("User", back_populates="memberships")
+    user = orm_relationship("User", back_populates="memberships", foreign_keys=[user_id])
     organization = orm_relationship("Organization", back_populates="memberships")
+    inviter = orm_relationship("User", foreign_keys=[invited_by_user_id])
 
 
 class Job(Base):
