@@ -269,3 +269,153 @@ def test_organization_scoped_investigation_creation_is_available_to_members():
     assert 'id="investigationOrganization"' in response.text
     assert "loadInvestigationOrganizations" in response.text
     assert "organization_id" in response.text
+
+
+def test_organization_investigator_cannot_access_colleague_investigation(monkeypatch):
+    from contextlib import contextmanager
+    from fastapi import HTTPException, Request
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app import auth
+    from app.db import Base
+    from app.models import (
+        Job, JobStatus, MembershipRole, Organization,
+        OrganizationMembership, User, UserRole,
+    )
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    owner = User(email="owner@org.example.com", password_hash="test", global_role=UserRole.investigator)
+    colleague = User(email="colleague@org.example.com", password_hash="test", global_role=UserRole.investigator)
+    manager = User(email="manager@org.example.com", password_hash="test", global_role=UserRole.investigator)
+    session.add_all([owner, colleague, manager])
+    session.flush()
+    organization = Organization(
+        name="Example Institution",
+        slug="example-institution",
+        created_by_user_id=manager.id,
+    )
+    session.add(organization)
+    session.flush()
+    session.add_all([
+        OrganizationMembership(organization_id=organization.id, user_id=colleague.id, role=MembershipRole.investigator),
+        OrganizationMembership(organization_id=organization.id, user_id=manager.id, role=MembershipRole.entity),
+    ])
+    job = Job(
+        input_value="Confidential investigation",
+        investigation_title="Confidential investigation",
+        input_type="investigation",
+        status=JobStatus.draft,
+        owner_user_id=owner.id,
+        organization_id=organization.id,
+    )
+    session.add(job)
+    session.flush()
+
+    @contextmanager
+    def fake_db_session():
+        yield session
+
+    monkeypatch.setattr(auth, "db_session", fake_db_session)
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": f"/api/v1/jobs/{job.id}",
+        "headers": [],
+        "query_string": b"",
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+        "scheme": "http",
+        "path_params": {"job_id": job.id},
+        "root_path": "",
+    }
+    try:
+        with __import__("pytest").raises(HTTPException) as error:
+            auth.authorize_api_request(Request(dict(scope)), colleague)
+        assert error.value.status_code == 404
+        # Entity managers can inspect the same organizational investigation,
+        # but mutation routes are rejected by the same central policy.
+        auth.authorize_api_request(Request(dict(scope)), manager)
+        mutation_scope = dict(scope, method="POST")
+        with __import__("pytest").raises(HTTPException) as mutation_error:
+            auth.authorize_api_request(Request(mutation_scope), manager)
+        assert mutation_error.value.status_code == 403
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_job_listing_exposes_org_investigations_only_to_entity_managers(monkeypatch):
+    from contextlib import contextmanager
+    from fastapi import FastAPI, Request
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app import api
+    from app.db import Base
+    from app.models import (
+        Job, JobStatus, MembershipRole, Organization,
+        OrganizationMembership, User, UserRole,
+    )
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    owner = User(email="owner2@org.example.com", password_hash="test", global_role=UserRole.investigator)
+    colleague = User(email="colleague2@org.example.com", password_hash="test", global_role=UserRole.investigator)
+    manager = User(email="manager2@org.example.com", password_hash="test", global_role=UserRole.investigator)
+    session.add_all([owner, colleague, manager])
+    session.flush()
+    organization = Organization(name="Example Institution 2", slug="example-institution-2", created_by_user_id=manager.id)
+    session.add(organization)
+    session.flush()
+    session.add_all([
+        OrganizationMembership(organization_id=organization.id, user_id=colleague.id, role=MembershipRole.investigator),
+        OrganizationMembership(organization_id=organization.id, user_id=manager.id, role=MembershipRole.entity),
+    ])
+    session.add(Job(
+        input_value="Org investigation",
+        investigation_title="Org investigation",
+        input_type="investigation",
+        status=JobStatus.draft,
+        owner_user_id=owner.id,
+        organization_id=organization.id,
+    ))
+    session.flush()
+    actor = {"id": colleague.id}
+
+    @contextmanager
+    def fake_db_session():
+        yield session
+
+    def fake_auth(request: Request):
+        request.state.current_user_id = actor["id"]
+
+    monkeypatch.setattr(api, "db_session", fake_db_session)
+    test_app = FastAPI()
+    test_app.include_router(api.router)
+    test_app.dependency_overrides[api.authorize_api_request] = fake_auth
+    try:
+        with TestClient(test_app) as client:
+            assert client.get("/api/v1/jobs").json() == []
+            actor["id"] = manager.id
+            visible = client.get("/api/v1/jobs")
+            assert visible.status_code == 200
+            assert len(visible.json()) == 1
+            assert visible.json()[0]["investigation_title"] == "Org investigation"
+    finally:
+        session.close()
+        engine.dispose()
