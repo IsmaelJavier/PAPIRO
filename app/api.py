@@ -326,6 +326,7 @@ def ingest_name(
     payload: IngestNameRequest,
     request: Request,
 ):
+    requested_at = datetime.now(timezone.utc).isoformat()
     value = " ".join(
         payload.name.split()
     ).strip()
@@ -357,7 +358,7 @@ def ingest_name(
 
         job_id = job.id
 
-    process_person_name_job.delay(job_id)
+    process_person_name_job.delay(job_id, requested_at, None)
 
     return JobCreatedResponse(
         job_id=job_id,
@@ -407,13 +408,23 @@ def create_investigation(
     "/jobs/{job_id}/search/name",
     status_code=202,
 )
-def manual_name_search(job_id: str, payload: ManualNameSearchRequest):
+def manual_name_search(job_id: str, payload: ManualNameSearchRequest, request: Request):
     query = " ".join(payload.query.split()).strip()
+    requested_at = datetime.now(timezone.utc).isoformat()
+    user_id = request.state.current_user_id
     with db_session() as session:
-        repo = Repository(session)
-        if not repo.get_job(job_id):
-            raise HTTPException(status_code=404, detail="job not found")
-    task = process_manual_person_name_search.delay(job_id, query)
+        _require_investigator_job(session, job_id, user_id)
+        active_checkpoint = session.scalar(
+            select(InvestigationCheckpoint)
+            .where(
+                InvestigationCheckpoint.job_id == job_id,
+                InvestigationCheckpoint.user_id == user_id,
+                InvestigationCheckpoint.status == "active",
+            )
+            .order_by(InvestigationCheckpoint.created_at.desc())
+        )
+        checkpoint_id = active_checkpoint.id if active_checkpoint else None
+    task = process_manual_person_name_search.delay(job_id, query, requested_at, checkpoint_id)
     return {"job_id": job_id, "query": query, "task_id": task.id, "status": "queued"}
 
 
