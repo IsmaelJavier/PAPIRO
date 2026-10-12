@@ -157,12 +157,15 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
         if actor.global_role == UserRole.superuser:
             return
 
-        # Organization membership management is a separate capability: entity
-        # managers can administer membership, but not investigation content.
+        # Organization identity is a privileged provisioning operation.
+        # Letting any investigator create an organization and automatically
+        # become its entity manager would let users self-assign that capability.
+        # Verified organizations are provisioned through /api/v1/admin/organizations.
         if path == "/api/v1/organizations" and method == "POST":
-            if actor.global_role != UserRole.investigator:
-                raise HTTPException(status_code=403, detail="Forbidden")
-            return
+            raise HTTPException(
+                status_code=403,
+                detail="Organization registration requires verified administrative provisioning",
+            )
         if path.startswith("/api/v1/admin/"):
             raise HTTPException(status_code=403, detail="Superuser role required")
         if "organization_id" in params:
@@ -241,6 +244,12 @@ class OrganizationCreateRequest(BaseModel):
     slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
+class AdminOrganizationCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=200)
+    slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    manager_email: EmailStr
+
+
 class MembershipCreateRequest(BaseModel):
     email: EmailStr
     role: str = "investigator"
@@ -272,6 +281,42 @@ def admin_create_user(payload: AdminUserCreateRequest, request: Request):
         session.add(user)
         session.flush()
         return UserResponse(id=user.id, email=user.email, global_role=user.global_role.value, is_active=user.is_active)
+
+
+@admin_router.post("/organizations", status_code=201)
+def admin_create_organization(payload: AdminOrganizationCreateRequest):
+    """Provision an organization only after an administrator verifies its identity."""
+    email = str(payload.manager_email).strip().lower()
+    with db_session() as session:
+        if session.scalar(select(Organization).where(Organization.slug == payload.slug)):
+            raise HTTPException(status_code=409, detail="Organization identifier already exists")
+        manager = session.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
+        if not manager:
+            raise HTTPException(status_code=404, detail="The verified entity manager must have an active account")
+        if manager.global_role != UserRole.investigator:
+            raise HTTPException(status_code=422, detail="The entity manager must use an investigator account")
+        org = Organization(
+            name=payload.name.strip(),
+            slug=payload.slug,
+            created_by_user_id=manager.id,
+        )
+        session.add(org)
+        session.flush()
+        membership = OrganizationMembership(
+            organization_id=org.id,
+            user_id=manager.id,
+            role=MembershipRole.entity,
+        )
+        session.add(membership)
+        session.flush()
+        return {
+            "id": org.id,
+            "name": org.name,
+            "slug": org.slug,
+            "entity_identifier": org.slug,
+            "manager_email": manager.email,
+            "role": membership.role.value,
+        }
 
 
 @organization_router.post("", status_code=201)
