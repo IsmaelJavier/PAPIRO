@@ -318,7 +318,7 @@ def test_organization_investigator_cannot_access_colleague_investigation(monkeyp
     session = sessionmaker(bind=engine, expire_on_commit=False)()
     owner = User(email="owner@org.example.com", password_hash="test", global_role=UserRole.investigator)
     colleague = User(email="colleague@org.example.com", password_hash="test", global_role=UserRole.investigator)
-    manager = User(email="manager@org.example.com", password_hash="test", global_role=UserRole.investigator)
+    manager = User(email="manager@org.example.com", password_hash="test", global_role=UserRole.entity)
     session.add_all([owner, colleague, manager])
     session.flush()
     organization = Organization(
@@ -400,7 +400,7 @@ def test_job_listing_exposes_org_investigations_only_to_entity_managers(monkeypa
     session = sessionmaker(bind=engine, expire_on_commit=False)()
     owner = User(email="owner2@org.example.com", password_hash="test", global_role=UserRole.investigator)
     colleague = User(email="colleague2@org.example.com", password_hash="test", global_role=UserRole.investigator)
-    manager = User(email="manager2@org.example.com", password_hash="test", global_role=UserRole.investigator)
+    manager = User(email="manager2@org.example.com", password_hash="test", global_role=UserRole.entity)
     session.add_all([owner, colleague, manager])
     session.flush()
     organization = Organization(name="Example Institution 2", slug="example-institution-2", created_by_user_id=manager.id)
@@ -443,3 +443,22 @@ def test_job_listing_exposes_org_investigations_only_to_entity_managers(monkeypa
     finally:
         session.close()
         engine.dispose()
+
+
+def test_entity_role_cannot_be_self_registered(monkeypatch):
+    from fastapi import HTTPException
+
+    from app import auth
+
+    monkeypatch.setattr(auth, "_secret", lambda: "test-secret")
+    payload = auth.RegisterRequest(
+        email="self-claimed-entity@example.com",
+        password="long-enough-test-password",
+        global_role="entity",
+    )
+    try:
+        auth.register(payload)
+        assert False, "Entity accounts must be provisioned by an administrator"
+    except HTTPException as error:
+        assert error.status_code == 422
+        assert "investigator or user" in error.detail
