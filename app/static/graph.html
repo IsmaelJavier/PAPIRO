@@ -640,7 +640,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   };
   const leaveToWorkspace=async()=>{
     if(exitInProgress)return;exitInProgress=true;
-    if(readOnlySession){restoreLocalBaseline();location.href='/ui/workspace';return;}
+    if(readOnlySession||!checkpointReady){restoreLocalBaseline();location.href='/ui/workspace';return;}
     setExitProgress('Confirmando los cambios guardados…');
     try{await window.beginInvestigationEditingSession();saveView();await closeCheckpoint();location.href='/ui/workspace';}
     catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudieron confirmar los cambios. La sesión sigue abierta. ${e.message}`);}
@@ -658,7 +658,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   };
   const logoutAndClearView=async()=>{
     if(exitInProgress)return;exitInProgress=true;
-    if(readOnlySession){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
+    if(readOnlySession||!checkpointReady){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
     setExitProgress('Restaurando el estado inicial antes de cerrar sesión…');
     try{
       await window.beginInvestigationEditingSession();
@@ -669,7 +669,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   };
   const saveAndLogout=async()=>{
     if(exitInProgress)return;exitInProgress=true;
-    if(readOnlySession){localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
+    if(readOnlySession||!checkpointReady){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
     setExitProgress('Confirmando los cambios antes de cerrar sesión…');
     try{await window.beginInvestigationEditingSession();saveView();await closeCheckpoint();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');}
     catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudieron guardar los cambios. La sesión sigue abierta. ${e.message}`);}
