@@ -590,6 +590,17 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
     ['manualSearch','manualSearchBtn','createEntityBtn','saveEntityBtn','saveEntityEditBtn',
      'saveRelationshipBtn','saveRelationshipEditBtn','shareInvestigationBtn','mergeInvestigationBtn']
       .forEach(id=>{const control=document.getElementById(id);if(control)control.disabled=true;});
+    // Detail panels render assessment/edit actions dynamically. Block their mutating
+    // inline handlers too, while preserving navigation and local graph-view controls.
+    document.addEventListener('click',event=>{
+      const button=event.target.closest('button');
+      if(!button)return;
+      const handler=button.getAttribute('onclick')||'';
+      if(/assessFinding|assessRelationship|assessCorrelation|saveEntity|saveRelationship|openEntityEdit|openRelationshipEdit|attachSelectedFindingsToEntity/.test(handler)){
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    },true);
   };
   const detectReadOnlySession=async()=>{
     const job=await api(`/jobs/${encodeURIComponent(jobId)}`);
