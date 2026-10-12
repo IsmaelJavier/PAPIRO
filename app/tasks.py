@@ -1,12 +1,20 @@
 import httpx
 
 from app.db import db_session
-from app.models import JobStatus, RunStatus
+from app.models import InvestigationCheckpoint, JobStatus, RunStatus
 from app.repository import Repository
 from app.sources.github import GitHubRateLimitError
 from app.sources.wikidata import WikidataRateLimitError
 from app.sources.registry import get_person_name_sources
 from app.worker import celery_app
+
+
+def _discard_requested(session, job_id: str) -> bool:
+    """Workers must stop committing results once an investigator discards a session."""
+    return session.query(InvestigationCheckpoint.id).filter(
+        InvestigationCheckpoint.job_id == job_id,
+        InvestigationCheckpoint.status == "restoring",
+    ).first() is not None
 
 
 @celery_app.task(name="app.tasks.process_person_name_job")
@@ -28,6 +36,9 @@ def process_person_name_job(job_id: str):
         source_errors: list[str] = []
 
         for source in sources:
+            if _discard_requested(session, job_id):
+                session.rollback()
+                return {"job_id": job_id, "status": "discarded", "cancelled": True}
             run = repo.create_run(
                 job.id,
                 source.module_name,
@@ -37,6 +48,9 @@ def process_person_name_job(job_id: str):
 
             try:
                 result = source.search_person_name(job.input_value)
+                if _discard_requested(session, job_id):
+                    session.rollback()
+                    return {"job_id": job_id, "status": "discarded", "cancelled": True}
                 for finding, indicators in result.findings:
                     repo.add_finding(job.id, finding, indicators)
 
@@ -134,11 +148,17 @@ def process_manual_person_name_search(job_id: str, query: str):
         errors: list[str] = []
 
         for source in sources:
+            if _discard_requested(session, job_id):
+                session.rollback()
+                return {"job_id": job_id, "query": query, "status": "discarded", "cancelled": True}
             run = repo.create_run(job.id, source.module_name, source.name, query)
             try:
                 # Sources expose the same contract; temporarily build the
                 # canonical input through the source's public name-search API.
                 result = source.search_person_name(query)
+                if _discard_requested(session, job_id):
+                    session.rollback()
+                    return {"job_id": job_id, "query": query, "status": "discarded", "cancelled": True}
                 before = len(repo.get_findings(job.id))
                 for finding, indicators in result.findings:
                     repo.add_finding(job.id, finding, indicators)
