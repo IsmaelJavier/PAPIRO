@@ -660,8 +660,12 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
        await beginInvestigationEditingSession();
        await loadAll(true);
      }catch(error){
-       localStorage.removeItem(TOKEN_KEY);
-       location.replace('/ui');
+       if(/Authentication required|HTTP 401|Invalid or expired token/i.test(error.message)){
+         localStorage.removeItem(TOKEN_KEY);
+         location.replace('/ui');
+       }else{
+         setDetails(`<div class="error"><b>No se pudo iniciar la sesión de edición.</b><p>${esc(error.message)}</p><p>La investigación no se ha modificado. Puedes volver al espacio de trabajo e intentarlo de nuevo.</p></div>`);
+       }
      }
    })();
  });
