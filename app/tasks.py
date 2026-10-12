@@ -26,13 +26,13 @@ def _capture_checkpoint_guard(session, job_id: str, requested_at=None, requested
 
 def _discard_requested(session, job_id: str, checkpoint_id, started_at) -> bool:
     """Detect discard of the task's session or any session opened after it was queued."""
+    session_scope = [InvestigationCheckpoint.created_at >= started_at]
+    if checkpoint_id:
+        session_scope.append(InvestigationCheckpoint.id == checkpoint_id)
     discarded_session = session.query(InvestigationCheckpoint.id).filter(
         InvestigationCheckpoint.job_id == job_id,
         InvestigationCheckpoint.status.in_(("restoring", "discarded")),
-        or_(
-            InvestigationCheckpoint.created_at >= started_at,
-            InvestigationCheckpoint.id == checkpoint_id if checkpoint_id else False,
-        ),
+        or_(*session_scope),
     )
     return discarded_session.first() is not None
 
