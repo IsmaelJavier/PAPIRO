@@ -482,11 +482,16 @@ def list_jobs(request: Request):
                     is_shared=(session.scalar(select(InvestigationShare.id).where(InvestigationShare.shared_job_id == job.id)) is not None),
                     can_edit=bool(
                         actor
-                        and actor.global_role not in {UserRole.user, UserRole.entity}
-                        and job.owner_user_id == user_id
                         and (
-                            (share := session.scalar(select(InvestigationShare).where(InvestigationShare.shared_job_id == job.id))) is None
-                            or share.permission == "edit"
+                            actor.global_role == UserRole.superuser
+                            or (
+                                actor.global_role not in {UserRole.user, UserRole.entity}
+                                and job.owner_user_id == user_id
+                                and (
+                                    (share := session.scalar(select(InvestigationShare).where(InvestigationShare.shared_job_id == job.id))) is None
+                                    or share.permission == "edit"
+                                )
+                            )
                         )
                     ),
                     input_value=job.input_value,
@@ -903,9 +908,14 @@ def get_job(
         share = session.scalar(select(InvestigationShare).where(InvestigationShare.shared_job_id == job.id))
         can_edit = bool(
             actor
-            and actor.global_role not in {UserRole.user, UserRole.entity}
-            and job.owner_user_id == user_id
-            and (share is None or share.permission == "edit")
+            and (
+                actor.global_role == UserRole.superuser
+                or (
+                    actor.global_role not in {UserRole.user, UserRole.entity}
+                    and job.owner_user_id == user_id
+                    and (share is None or share.permission == "edit")
+                )
+            )
         )
         return JobResponse(
             id=job.id,
