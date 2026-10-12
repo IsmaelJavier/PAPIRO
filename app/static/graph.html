@@ -120,6 +120,10 @@
           <div class="stat"><strong id="nEntities">0</strong><span>Entidades</span></div>
         </div>
       </section>
+      <section class="section" id="investigationNotesSection" hidden>
+        <h2>Notas de la investigación</h2>
+        <p id="investigationNotesText" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.55;margin:0"></p>
+      </section>
       <section class="section">
         <h2>1 · Nueva búsqueda</h2>
         <div class="field"><label>Buscar una persona en las fuentes configuradas</label><input id="manualSearch" placeholder="Ej.: Linus Torvalds"></div>
@@ -549,7 +553,7 @@ function applyGraphFilters(){
 }
 async function runManualSearch(){const input=document.getElementById('manualSearch'),status=document.getElementById('searchStatus'),btn=document.getElementById('manualSearchBtn'),query=input.value.trim();if(query.length<2){status.textContent='Escribe al menos 2 caracteres.';return;}btn.disabled=true;status.textContent='Buscando en las fuentes configuradas…';try{const r=await api(`/jobs/${encodeURIComponent(jobId)}/search/name`,{method:'POST',body:JSON.stringify({query})});status.textContent=`Búsqueda enviada. Actualizando resultados…`;let tries=0;const poll=setInterval(async()=>{tries++;try{await loadAll(true);if(findings.some(f=>f.input_value===query)){clearInterval(poll);status.textContent='Búsqueda completada. Los resultados forman parte de la investigación.';}else if(tries>=20){clearInterval(poll);status.textContent='La búsqueda sigue procesándose; puedes actualizar más tarde.';}}catch{}},1500);void r;}catch(e){status.textContent=`No se pudo ejecutar la búsqueda: ${e.message}`;}finally{setTimeout(()=>btn.disabled=false,1000);}}
 async function loadAll(preserve=true){
-  try{const [job,g,f,c,e,r]=await Promise.all([api(`/jobs/${encodeURIComponent(jobId)}`),api(`/jobs/${encodeURIComponent(jobId)}/graph`),api(`/jobs/${encodeURIComponent(jobId)}/findings`),api(`/jobs/${encodeURIComponent(jobId)}/correlations`),api(`/jobs/${encodeURIComponent(jobId)}/entities`),api(`/jobs/${encodeURIComponent(jobId)}/relationships`)]);graphData=g;findings=f;correlations=c;entities=e;relationships=r;document.getElementById('jobLabel').textContent=`Investigación: ${job.input_value} · Estado: ${job.status} · ID: ${job.id}`;document.getElementById('nFindings').textContent=g.summary?.findings??job.finding_count??0;document.getElementById('nIndicators').textContent=g.summary?.indicators??0;document.getElementById('nCorrelations').textContent=g.summary?.correlations??job.correlation_count??0;document.getElementById('nEntities').textContent=g.summary?.entities??entities.length;const sf=document.getElementById('sourceFilter'),old=sf.value;sf.innerHTML='<option value="all">Todas las fuentes</option>'+[...new Set(findings.map(f=>f.source))].sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');sf.value=[...sf.options].some(o=>o.value===old)?old:'all';renderFindings();renderEntities();buildGraph(preserve);}catch(e){if(/Authentication required|HTTP 401|Invalid or expired token/i.test(e.message)){localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}setDetails(`<div class="error"><b>No se pudo cargar la investigación.</b><p>${esc(e.message)}</p><p>Comprueba que el API esté activo y que el job exista.</p></div>`);}}
+  try{const [job,g,f,c,e,r]=await Promise.all([api(`/jobs/${encodeURIComponent(jobId)}`),api(`/jobs/${encodeURIComponent(jobId)}/graph`),api(`/jobs/${encodeURIComponent(jobId)}/findings`),api(`/jobs/${encodeURIComponent(jobId)}/correlations`),api(`/jobs/${encodeURIComponent(jobId)}/entities`),api(`/jobs/${encodeURIComponent(jobId)}/relationships`)]);graphData=g;findings=f;correlations=c;entities=e;relationships=r;document.getElementById('jobLabel').textContent=`Investigación: ${job.investigation_title||job.input_value} · Estado: ${job.status==='draft'?'Borrador':job.status} · ID: ${job.id}`;const notesSection=document.getElementById('investigationNotesSection');notesSection.hidden=!job.notes;document.getElementById('investigationNotesText').textContent=job.notes||'';document.getElementById('nFindings').textContent=g.summary?.findings??job.finding_count??0;document.getElementById('nIndicators').textContent=g.summary?.indicators??0;document.getElementById('nCorrelations').textContent=g.summary?.correlations??job.correlation_count??0;document.getElementById('nEntities').textContent=g.summary?.entities??entities.length;const sf=document.getElementById('sourceFilter'),old=sf.value;sf.innerHTML='<option value="all">Todas las fuentes</option>'+[...new Set(findings.map(f=>f.source))].sort().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');sf.value=[...sf.options].some(o=>o.value===old)?old:'all';renderFindings();renderEntities();buildGraph(preserve);}catch(e){if(/Authentication required|HTTP 401|Invalid or expired token/i.test(e.message)){localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}setDetails(`<div class="error"><b>No se pudo cargar la investigación.</b><p>${esc(e.message)}</p><p>Comprueba que el API esté activo y que el job exista.</p></div>`);}}
 document.getElementById('sourceFilter').onchange=()=>{renderFindings();applyGraphFilters();};
 document.getElementById('findingSearch').oninput=()=>{renderFindings();applyGraphFilters();};
 document.getElementById('nodeTypeFilter').onchange=applyGraphFilters;
@@ -559,18 +563,26 @@ document.getElementById('showMemberships').onchange=applyGraphFilters;
 document.getElementById('fitBtn').onclick=()=>cy?.fit(cy.elements(':visible'),50);
 document.getElementById('resetGraphBtn').onclick=()=>{hiddenNodeIds.clear();persistHidden();document.getElementById('nodeTypeFilter').value='all';document.getElementById('sourceFilter').value='all';document.getElementById('findingSearch').value='';renderFindings();applyGraphFilters();cy?.fit(cy.elements(':visible'),50);};
 document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElementById('showHiddenBtn').onclick=showAllHidden;document.getElementById('selectVisible').onclick=selectVisible;document.getElementById('clearSelection').onclick=clearSelection;document.getElementById('createEntityBtn').onclick=openEntityModal;document.getElementById('saveEntityBtn').onclick=saveEntity;document.getElementById('saveEntityEditBtn').onclick=saveEntityEdit;document.getElementById('saveRelationshipBtn').onclick=saveRelationship;document.getElementById('saveRelationshipEditBtn').onclick=saveRelationshipEdit;document.getElementById('manualSearchBtn').onclick=runManualSearch;document.getElementById('manualSearch').addEventListener('keydown',e=>{if(e.key==='Enter')runManualSearch();});document.getElementById('reloadBtn').onclick=()=>loadAll(true);
- const sessionModal=document.getElementById('sessionModal');
+ document.addEventListener('DOMContentLoaded',()=>{
+  const sessionModal=document.getElementById('sessionModal');
   const openSessionModal=()=>{sessionModal.style.display='flex';};
   const closeSessionModal=()=>{sessionModal.style.display='none';};
-  const leaveToWorkspace=()=>{if(cy)savePositions();persistHidden();location.href='/ui/workspace';};
-  const logoutAndClearView=()=>{localStorage.removeItem(positionKey);localStorage.removeItem(`kami:hidden:${jobId}`);localStorage.removeItem(TOKEN_KEY);location.replace('/ui');};
+  const saveView=()=>{if(cy)savePositions();persistHidden();};
+  const clearView=()=>{localStorage.removeItem(positionKey);localStorage.removeItem(`kami:hidden:${jobId}`);};
+  const leaveToWorkspace=()=>{saveView();location.href='/ui/workspace';};
+  const leaveWithoutSaving=()=>{clearView();location.href='/ui/workspace';};
+  const logoutAndClearView=()=>{clearView();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');};
+  const saveAndLogout=()=>{saveView();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');};
   document.getElementById('authBtn').onclick=openSessionModal;
   document.getElementById('cancelSessionExit').onclick=closeSessionModal;
-  document.getElementById('saveAndLogout').onclick=()=>{if(cy)savePositions();persistHidden();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');};
+  document.getElementById('leaveWithoutSaving').onclick=leaveWithoutSaving;
+  document.getElementById('saveAndLeave').onclick=leaveToWorkspace;
+  document.getElementById('saveAndLogout').onclick=saveAndLogout;
   document.getElementById('logoutWithoutViewSave').onclick=logoutAndClearView;
   document.getElementById('saveExitBtn').onclick=leaveToWorkspace;
   document.getElementById('workspaceLink').onclick=e=>{e.preventDefault();leaveToWorkspace();};
   sessionModal.addEventListener('click',e=>{if(e.target===sessionModal)closeSessionModal();});
+ });
  document.getElementById('closeLoginBtn').onclick=()=>closeModal('loginModal');
  document.getElementById('showLoginTab').onclick=()=>showAuthTab('login');
  document.getElementById('showRegisterTab').onclick=()=>showAuthTab('register');
@@ -593,7 +605,7 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   <div class="session-modal"><h2 id="sessionModalTitle">¿Cómo deseas salir?</h2>
     <p>Las modificaciones de datos (hallazgos evaluados, entidades y relaciones) se guardan en el servidor al confirmar cada operación. La posición de los nodos y los elementos ocultos se guardan automáticamente en este navegador.</p>
     <p>Si eliges salir sin guardar, se descartará únicamente la vista local del grafo; los cambios de datos ya confirmados en el servidor permanecerán guardados.</p>
-    <div class="session-modal-actions"><button class="btn" type="button" id="cancelSessionExit">Cancelar</button><button class="btn danger-fill" type="button" id="logoutWithoutViewSave">Cerrar sesión sin guardar la vista</button><button class="btn primary" type="button" id="saveAndLogout">Guardar y cerrar sesión</button></div>
+    <div class="session-modal-actions"><button class="btn" type="button" id="cancelSessionExit">Cancelar</button><button class="btn danger" type="button" id="leaveWithoutSaving">Salir sin guardar</button><button class="btn primary" type="button" id="saveAndLeave">Guardar y salir</button><button class="btn danger-fill" type="button" id="logoutWithoutViewSave">Cerrar sesión sin guardar</button><button class="btn primary" type="button" id="saveAndLogout">Guardar y cerrar sesión</button></div>
   </div>
 </div></body>
 </html>
