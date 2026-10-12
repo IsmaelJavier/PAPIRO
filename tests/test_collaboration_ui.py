@@ -468,3 +468,107 @@ def test_entity_role_cannot_be_self_registered(monkeypatch):
     except HTTPException as error:
         assert error.status_code == 422
         assert "investigator or user" in error.detail
+
+
+def test_admin_verification_preserves_existing_organization_and_investigations(monkeypatch):
+    from contextlib import contextmanager
+    from fastapi import Request
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app import auth
+    from app.db import Base
+    from app.models import (
+        Job, JobStatus, MembershipRole, Organization,
+        OrganizationMembership, User, UserRole,
+    )
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    original_creator = User(
+        email="legacy-creator@example.com",
+        password_hash="test",
+        global_role=UserRole.investigator,
+    )
+    manager = User(
+        email="verified-entity@example.com",
+        password_hash="test",
+        global_role=UserRole.entity,
+    )
+    administrator = User(
+        email="verifier@example.com",
+        password_hash="test",
+        global_role=UserRole.superuser,
+    )
+    session.add_all([original_creator, manager, administrator])
+    session.flush()
+    organization = Organization(
+        name="Legacy Institution",
+        slug="legacy-institution-001",
+        created_by_user_id=original_creator.id,
+    )
+    session.add(organization)
+    session.flush()
+    organization_id = organization.id
+    job = Job(
+        input_value="Preserve this investigation",
+        investigation_title="Preserve this investigation",
+        input_type="investigation",
+        status=JobStatus.draft,
+        owner_user_id=original_creator.id,
+        organization_id=organization.id,
+    )
+    session.add(job)
+    session.flush()
+    job_id = job.id
+
+    @contextmanager
+    def fake_db_session():
+        yield session
+
+    monkeypatch.setattr(auth, "db_session", fake_db_session)
+    request = Request({
+        "type": "http",
+        "method": "POST",
+        "path": "/api/v1/admin/organizations",
+        "headers": [],
+        "query_string": b"",
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+        "scheme": "http",
+        "path_params": {},
+        "root_path": "",
+    })
+    request.state.current_user_id = administrator.id
+    try:
+        auth.admin_create_organization(
+            auth.AdminOrganizationCreateRequest(
+                name="Verified Legacy Institution",
+                slug="legacy-institution-001",
+                manager_email="verified-entity@example.com",
+            ),
+            request,
+        )
+        preserved_org = session.get(Organization, organization_id)
+        preserved_job = session.get(Job, job_id)
+        membership = session.scalar(select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == organization_id,
+            OrganizationMembership.user_id == manager.id,
+        ))
+        assert preserved_org is not None
+        assert preserved_org.name == "Verified Legacy Institution"
+        assert preserved_org.created_by_user_id == original_creator.id
+        assert preserved_org.verified_by_user_id == administrator.id
+        assert preserved_org.contact_email == manager.email
+        assert preserved_job is not None
+        assert preserved_job.organization_id == organization_id
+        assert membership is not None and membership.role == MembershipRole.entity
+    finally:
+        session.close()
+        engine.dispose()
