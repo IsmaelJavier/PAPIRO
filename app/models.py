@@ -740,6 +740,34 @@ class Indicator(Base):
         back_populates="indicators",
     )
 
+class InvestigationShare(Base):
+    """A collaborator-specific copy of an original investigation."""
+
+    __tablename__ = "investigation_shares"
+    __table_args__ = (UniqueConstraint("original_job_id", "collaborator_user_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    original_job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    shared_job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    owner_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    collaborator_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    permission: Mapped[str] = mapped_column(String(16), nullable=False, default="read")
+    base_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class InvestigationComment(Base):
+    """Discussion attached to a shared investigation copy."""
+
+    __tablename__ = "investigation_comments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    share_id: Mapped[str] = mapped_column(ForeignKey("investigation_shares.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 class InvestigationCheckpoint(Base):
     """Per-user baseline for undoing one investigation editing session."""
 
