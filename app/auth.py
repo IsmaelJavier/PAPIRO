@@ -399,6 +399,7 @@ def approve_entity_registration_request(request_id: str, request: Request):
         item.reviewed_by_user_id = administrator_id
         item.organization_id = org.id
         item.rejection_reason = None
+        item.password_hash = ""  # Avoid retaining a second copy of the account credential hash.
         session.flush()
         return {"request_id": item.id, "status": item.status, "email": user.email, "organization_id": org.id, "organization_name": org.name, "verified_by_user_id": administrator_id}
 
@@ -421,6 +422,7 @@ def reject_entity_registration_request(request_id: str, payload: EntityRequestDe
         item.reviewed_at = datetime.now(timezone.utc)
         item.reviewed_by_user_id = administrator_id
         item.rejection_reason = (payload.rejection_reason or "").strip() or None
+        item.password_hash = ""  # A rejected request must not retain credential material.
         return {"request_id": item.id, "status": item.status}
 
 
@@ -501,6 +503,7 @@ def list_organizations(request: Request):
                 OrganizationMembership.user_id == user_id,
                 OrganizationMembership.is_active.is_(True),
                 Organization.is_active.is_(True),
+                Organization.verified_at.is_not(None),
             )
             .order_by(Organization.name.asc())
         ).all()
