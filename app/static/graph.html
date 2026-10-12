@@ -15,7 +15,14 @@
     header { display:flex; align-items:center; justify-content:space-between; padding:0 20px; background:var(--dark); color:#fff; }
     header h1 { margin:0; font-size:18px; letter-spacing:.1px; }
     header .sub { font-size:12px; color:#aeb9cc; margin-top:3px; }
-    .header-actions { display:flex; gap:8px; align-items:center; }
+    .header-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    #saveStatus { color:#aeb9cc; font-size:11px; min-width:120px; }
+    .session-modal-backdrop { position:fixed; inset:0; z-index:100; background:#0b1220a8; display:none; align-items:center; justify-content:center; padding:20px; }
+    .session-modal { width:min(520px,100%); background:#fff; color:var(--ink); border-radius:13px; padding:22px; box-shadow:0 18px 50px #0004; }
+    .session-modal h2 { margin:0 0 10px; font-size:19px; }
+    .session-modal p { font-size:13px; line-height:1.6; color:var(--muted); }
+    .session-modal-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:18px; }
+    .btn.danger-fill { background:#b42318; border-color:#b42318; color:#fff; }
     .header-actions a,.header-actions button { color:#e8edf7; background:#1b2638; border:1px solid #35445b; border-radius:7px; padding:8px 11px; text-decoration:none; }
     .layout { display:grid; grid-template-columns:310px minmax(420px,1fr) 370px; min-height:0; }
     .panel { background:var(--panel); min-height:0; }
@@ -95,9 +102,11 @@
       <div class="sub jobtext" id="jobLabel">Cargando investigación…</div>
     </div>
     <div class="header-actions">
-      <a id="docsLink" href="/docs" target="_blank" rel="noopener">API</a>
-      <button id="authBtn">Iniciar sesión</button>
-      <button id="reloadBtn">Actualizar</button>
+      <span id="saveStatus" role="status" aria-live="polite">Guardado automático activo</span>
+      <a id="workspaceLink" href="/ui/workspace">Espacio de trabajo</a>
+      <button id="saveExitBtn" type="button">Guardar y salir</button>
+      <button id="authBtn" type="button">Cerrar sesión</button>
+      <button id="reloadBtn" type="button">Actualizar</button>
     </div>
   </header>
   <div class="layout">
@@ -500,8 +509,9 @@ async function saveRelationship(){
 }
 
 function readPositions(){ try{return JSON.parse(localStorage.getItem(positionKey)||'{}')}catch{return {};} }
-function savePositions(){ if(!cy)return; const positions={}; cy.nodes().forEach(n=>{positions[n.id()]={x:n.position('x'),y:n.position('y')};}); localStorage.setItem(positionKey,JSON.stringify(positions)); }
-function persistHidden(){localStorage.setItem(`kami:hidden:${jobId}`,JSON.stringify([...hiddenNodeIds]));}
+function setSaveStatus(message){const el=document.getElementById('saveStatus');if(el)el.textContent=message;}
+function savePositions(){ if(!cy)return; const positions={}; cy.nodes().forEach(n=>{positions[n.id()]={x:n.position('x'),y:n.position('y')};}); localStorage.setItem(positionKey,JSON.stringify(positions));setSaveStatus('Vista guardada automáticamente'); }
+function persistHidden(){localStorage.setItem(`kami:hidden:${jobId}`,JSON.stringify([...hiddenNodeIds]));setSaveStatus('Vista guardada automáticamente');}
 function hideNode(id){hiddenNodeIds.add(id);persistHidden();applyGraphFilters();}
 function showAllHidden(){hiddenNodeIds.clear();persistHidden();applyGraphFilters();}
 function focusNode(id){if(!cy)return;hiddenNodeIds.delete(id);persistHidden();applyGraphFilters();const n=cy.getElementById(id);if(n.length){cy.animate({fit:{eles:n,padding:140},duration:250});n.select();}}
@@ -549,10 +559,18 @@ document.getElementById('showMemberships').onchange=applyGraphFilters;
 document.getElementById('fitBtn').onclick=()=>cy?.fit(cy.elements(':visible'),50);
 document.getElementById('resetGraphBtn').onclick=()=>{hiddenNodeIds.clear();persistHidden();document.getElementById('nodeTypeFilter').value='all';document.getElementById('sourceFilter').value='all';document.getElementById('findingSearch').value='';renderFindings();applyGraphFilters();cy?.fit(cy.elements(':visible'),50);};
 document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElementById('showHiddenBtn').onclick=showAllHidden;document.getElementById('selectVisible').onclick=selectVisible;document.getElementById('clearSelection').onclick=clearSelection;document.getElementById('createEntityBtn').onclick=openEntityModal;document.getElementById('saveEntityBtn').onclick=saveEntity;document.getElementById('saveEntityEditBtn').onclick=saveEntityEdit;document.getElementById('saveRelationshipBtn').onclick=saveRelationship;document.getElementById('saveRelationshipEditBtn').onclick=saveRelationshipEdit;document.getElementById('manualSearchBtn').onclick=runManualSearch;document.getElementById('manualSearch').addEventListener('keydown',e=>{if(e.key==='Enter')runManualSearch();});document.getElementById('reloadBtn').onclick=()=>loadAll(true);
- document.getElementById('authBtn').onclick=()=>{
-   localStorage.removeItem(TOKEN_KEY);
-   location.replace('/ui');
- };
+ const sessionModal=document.getElementById('sessionModal');
+  const openSessionModal=()=>{sessionModal.style.display='flex';};
+  const closeSessionModal=()=>{sessionModal.style.display='none';};
+  const leaveToWorkspace=()=>{if(cy)savePositions();persistHidden();location.href='/ui/workspace';};
+  const logoutAndClearView=()=>{localStorage.removeItem(positionKey);localStorage.removeItem(`kami:hidden:${jobId}`);localStorage.removeItem(TOKEN_KEY);location.replace('/ui');};
+  document.getElementById('authBtn').onclick=openSessionModal;
+  document.getElementById('cancelSessionExit').onclick=closeSessionModal;
+  document.getElementById('saveAndLogout').onclick=()=>{if(cy)savePositions();persistHidden();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');};
+  document.getElementById('logoutWithoutViewSave').onclick=logoutAndClearView;
+  document.getElementById('saveExitBtn').onclick=leaveToWorkspace;
+  document.getElementById('workspaceLink').onclick=e=>{e.preventDefault();leaveToWorkspace();};
+  sessionModal.addEventListener('click',e=>{if(e.target===sessionModal)closeSessionModal();});
  document.getElementById('closeLoginBtn').onclick=()=>closeModal('loginModal');
  document.getElementById('showLoginTab').onclick=()=>showAuthTab('login');
  document.getElementById('showRegisterTab').onclick=()=>showAuthTab('register');
@@ -571,5 +589,11 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
    }
  })();
 </script>
-</body>
+<div class="session-modal-backdrop" id="sessionModal" role="dialog" aria-modal="true" aria-labelledby="sessionModalTitle">
+  <div class="session-modal"><h2 id="sessionModalTitle">¿Cómo deseas salir?</h2>
+    <p>Las modificaciones de datos (hallazgos evaluados, entidades y relaciones) se guardan en el servidor al confirmar cada operación. La posición de los nodos y los elementos ocultos se guardan automáticamente en este navegador.</p>
+    <p>Si eliges salir sin guardar, se descartará únicamente la vista local del grafo; los cambios de datos ya confirmados en el servidor permanecerán guardados.</p>
+    <div class="session-modal-actions"><button class="btn" type="button" id="cancelSessionExit">Cancelar</button><button class="btn danger-fill" type="button" id="logoutWithoutViewSave">Cerrar sesión sin guardar la vista</button><button class="btn primary" type="button" id="saveAndLogout">Guardar y cerrar sesión</button></div>
+  </div>
+</div></body>
 </html>
