@@ -501,6 +501,29 @@ def list_jobs(request: Request):
         return result
 
 
+@router.delete("/jobs/{job_id}", status_code=204)
+def delete_investigation(job_id: str, request: Request):
+    """Permanently delete an investigation and its dependent evidence."""
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        job = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
+        if not job:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+        actor = session.get(User, user_id)
+        if not actor or (actor.global_role != UserRole.superuser and job.owner_user_id != user_id):
+            raise HTTPException(status_code=403, detail="Only the owner can delete this investigation")
+        tables, rows_by_table = _collect_investigation_rows(session, job_id)
+        # Remove dependent rows in reverse FK order, then the investigation.
+        for table in reversed(tables):
+            for row in rows_by_table.get(table.name, []):
+                keys = [column == row[column.name] for column in table.primary_key.columns]
+                if keys:
+                    session.execute(delete(table).where(and_(*keys)))
+        session.flush()
+    from fastapi import Response
+    return Response(status_code=204)
+
+
 @router.post("/jobs/{job_id}/checkpoint")
 def create_investigation_checkpoint(job_id: str, request: Request):
     """Capture the baseline once when an investigator opens an editing session."""
