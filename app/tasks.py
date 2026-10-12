@@ -1,8 +1,9 @@
 import httpx
 from datetime import datetime, timezone
+from sqlalchemy import or_, select
 
 from app.db import db_session
-from app.models import InvestigationCheckpoint, JobStatus, RunStatus
+from app.models import InvestigationCheckpoint, Job, JobStatus, RunStatus
 from app.repository import Repository
 from app.sources.github import GitHubRateLimitError
 from app.sources.wikidata import WikidataRateLimitError
@@ -10,33 +11,42 @@ from app.sources.registry import get_person_name_sources
 from app.worker import celery_app
 
 
-def _capture_checkpoint_guard(session, job_id: str):
-    """Remember the session active at task start, or the start time if none exists."""
-    started_at = datetime.now(timezone.utc)
+def _capture_checkpoint_guard(session, job_id: str, requested_at=None, requested_checkpoint_id=None):
+    """Keep the enqueue time so a queued task can detect a session discarded before it started."""
+    started_at = (
+        datetime.fromisoformat(requested_at)
+        if requested_at else datetime.now(timezone.utc)
+    )
     active_id = session.query(InvestigationCheckpoint.id).filter(
         InvestigationCheckpoint.job_id == job_id,
         InvestigationCheckpoint.status == "active",
     ).order_by(InvestigationCheckpoint.created_at.desc()).first()
-    return (active_id[0] if active_id else None), started_at
+    return requested_checkpoint_id or (active_id[0] if active_id else None), started_at
 
 
 def _discard_requested(session, job_id: str, checkpoint_id, started_at) -> bool:
-    """Detect discard even if the checkpoint has already reached its terminal state."""
-    query = session.query(InvestigationCheckpoint.id).filter(
+    """Detect discard of the task's session or any session opened after it was queued."""
+    discarded_session = session.query(InvestigationCheckpoint.id).filter(
         InvestigationCheckpoint.job_id == job_id,
         InvestigationCheckpoint.status.in_(("restoring", "discarded")),
+        or_(
+            InvestigationCheckpoint.created_at >= started_at,
+            InvestigationCheckpoint.id == checkpoint_id if checkpoint_id else False,
+        ),
     )
-    if checkpoint_id:
-        query = query.filter(InvestigationCheckpoint.id == checkpoint_id)
-    else:
-        query = query.filter(InvestigationCheckpoint.created_at >= started_at)
-    return query.first() is not None
+    return discarded_session.first() is not None
+
+
 
 
 @celery_app.task(name="app.tasks.process_person_name_job")
-def process_person_name_job(job_id: str):
+def process_person_name_job(job_id: str, requested_at: str | None = None, requested_checkpoint_id: str | None = None):
     with db_session() as session:
-        checkpoint_id, task_started_at = _capture_checkpoint_guard(session, job_id)
+        # Serialize worker writes with discard/restore, which locks the same job row.
+        session.execute(select(Job.id).where(Job.id == job_id).with_for_update()).first()
+        checkpoint_id, task_started_at = _capture_checkpoint_guard(
+            session, job_id, requested_at, requested_checkpoint_id
+        )
         repo = Repository(session)
         job = repo.get_job(job_id)
         if not job:
@@ -151,14 +161,21 @@ def process_person_name_job(job_id: str):
 
 
 @celery_app.task(name="app.tasks.process_manual_person_name_search")
-def process_manual_person_name_search(job_id: str, query: str):
+def process_manual_person_name_search(
+    job_id: str, query: str, requested_at: str | None = None,
+    requested_checkpoint_id: str | None = None,
+):
     """Run the configured person-name sources for an investigator-entered query.
 
     This is deliberately additive: findings are deduplicated against the job's
     existing evidence and no prior assessment/entity is changed.
     """
     with db_session() as session:
-        checkpoint_id, task_started_at = _capture_checkpoint_guard(session, job_id)
+        # Serialize worker writes with discard/restore, which locks the same job row.
+        session.execute(select(Job.id).where(Job.id == job_id).with_for_update()).first()
+        checkpoint_id, task_started_at = _capture_checkpoint_guard(
+            session, job_id, requested_at, requested_checkpoint_id
+        )
         repo = Repository(session)
         job = repo.get_job(job_id)
         if not job:
