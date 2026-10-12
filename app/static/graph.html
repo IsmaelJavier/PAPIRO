@@ -568,6 +568,7 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   const baselineKey=`kami:session-baseline:${jobId}`;
   const hiddenKey=`kami:hidden:${jobId}`;
   let checkpointReady=false;
+  let checkpointPromise=null;
   let exitInProgress=false;
   const openSessionModal=()=>{sessionModal.style.display='flex';};
   const setExitProgress=message=>{const status=document.getElementById('exitProgress');if(status){status.textContent=message||'';status.hidden=!message;}};
@@ -599,12 +600,13 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   };
   const leaveToWorkspace=async()=>{
     if(exitInProgress)return;exitInProgress=true;setExitProgress('Confirmando los cambios guardados…');
-    try{saveView();await closeCheckpoint();location.href='/ui/workspace';}
+    try{await window.beginInvestigationEditingSession();saveView();await closeCheckpoint();location.href='/ui/workspace';}
     catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudieron confirmar los cambios. La sesión sigue abierta. ${e.message}`);}
   };
   const leaveWithoutSaving=async()=>{
     if(exitInProgress)return;exitInProgress=true;setExitProgress('Restaurando el estado inicial… si hay una búsqueda en curso, puede tardar hasta que termine.');
     try{
+      await window.beginInvestigationEditingSession();
       await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
       restoreLocalBaseline();
       location.href='/ui/workspace';
@@ -613,6 +615,7 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   const logoutAndClearView=async()=>{
     if(exitInProgress)return;exitInProgress=true;setExitProgress('Restaurando el estado inicial antes de cerrar sesión…');
     try{
+      await window.beginInvestigationEditingSession();
       await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
       restoreLocalBaseline();
       localStorage.removeItem(TOKEN_KEY);location.replace('/ui');
@@ -620,15 +623,19 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   };
   const saveAndLogout=async()=>{
     if(exitInProgress)return;exitInProgress=true;setExitProgress('Confirmando los cambios antes de cerrar sesión…');
-    try{saveView();await closeCheckpoint();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');}
+    try{await window.beginInvestigationEditingSession();saveView();await closeCheckpoint();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');}
     catch(e){exitInProgress=false;setExitProgress('');alert(`No se pudieron guardar los cambios. La sesión sigue abierta. ${e.message}`);}
   };
-  window.beginInvestigationEditingSession=async()=>{
-    if(checkpointReady)return;
-    const checkpoint=await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint`,{method:'POST'});
-    rememberLocalBaseline(checkpoint.checkpoint_id);
-    checkpointReady=true;
-    return checkpoint;
+  window.beginInvestigationEditingSession=()=>{
+    if(checkpointReady)return Promise.resolve();
+    if(checkpointPromise)return checkpointPromise;
+    checkpointPromise=(async()=>{
+      const checkpoint=await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint`,{method:'POST'});
+      rememberLocalBaseline(checkpoint.checkpoint_id);
+      checkpointReady=true;
+      return checkpoint;
+    })().catch(error=>{checkpointPromise=null;throw error;});
+    return checkpointPromise;
   };
   document.getElementById('authBtn').onclick=openSessionModal;
   document.getElementById('cancelSessionExit').onclick=closeSessionModal;
