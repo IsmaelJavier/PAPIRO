@@ -19,6 +19,12 @@ class IngestNameRequest(BaseModel):
     organization_id: str | None = None
 
 
+class InvestigationCreateRequest(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+    notes: str | None = Field(default=None, max_length=10000)
+    organization_id: str | None = None
+
+
 class JobCreatedResponse(BaseModel):
     job_id: str
     status: str
@@ -138,6 +144,8 @@ class JobResponse(BaseModel):
     id: str
 
     input_value: str
+    investigation_title: str | None = None
+    notes: str | None = None
     input_type: str
 
     status: str
