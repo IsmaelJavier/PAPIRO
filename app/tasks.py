@@ -119,11 +119,7 @@ def process_person_name_job(job_id: str):
                 )
 
         if successful_sources == len(sources):
-            if _discard_requested(session, job_id, checkpoint_id, task_started_at):
-            session.rollback()
-            return {"job_id": job_id, "status": "discarded", "cancelled": True}
-
-        final_status = JobStatus.completed
+            final_status = JobStatus.completed
             error = None
         elif successful_sources > 0:
             final_status = JobStatus.partial
@@ -131,6 +127,10 @@ def process_person_name_job(job_id: str):
         else:
             final_status = JobStatus.failed
             error = "; ".join(source_errors)
+
+        if _discard_requested(session, job_id, checkpoint_id, task_started_at):
+            session.rollback()
+            return {"job_id": job_id, "status": "discarded", "cancelled": True}
 
         correlation_count = 0
         if total_findings > 1:
