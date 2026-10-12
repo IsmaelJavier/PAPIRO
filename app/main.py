@@ -31,6 +31,15 @@ def access_ui():
     )
 
 
+@app.get("/ui/workspace", include_in_schema=False)
+def workspace_ui():
+    """Serve the authenticated workspace dashboard as a dedicated page."""
+    return FileResponse(
+        Path(__file__).resolve().parent / "static" / "workspace.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache"},
+    )
+
+
 @app.get("/ui/job/{job_id}", include_in_schema=False)
 @app.get("/ui/graph/{job_id}", include_in_schema=False)
 def investigator_ui(job_id: str):
