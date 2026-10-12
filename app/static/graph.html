@@ -92,7 +92,8 @@
     .loading { color:var(--muted); font-size:12px; }
     @media (max-width:1150px) { .layout { grid-template-columns:280px 1fr; grid-template-rows:minmax(500px,1fr) auto; } .right { grid-column:1 / -1; border-left:0; border-top:1px solid var(--line); max-height:42vh; } }
     @media (max-width:760px) { .layout { display:flex; flex-direction:column; } .left,.right { max-height:none; border:0; border-bottom:1px solid var(--line); } .graph-wrap { min-height:62vh; } header { padding:0 12px; } header .jobtext { display:none; } }
-  </style>
+      [hidden] { display: none !important; }
+</style>
 </head>
 <body>
 <div class="app">
