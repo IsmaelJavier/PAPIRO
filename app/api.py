@@ -46,7 +46,7 @@ router = APIRouter(prefix="/api/v1", dependencies=[Depends(authorize_api_request
 def _investigation_tables():
     metadata_tables = Base.metadata.tables
     scoped = {"jobs"}
-    excluded = {"investigation_checkpoints", "users", "organizations", "organization_memberships"}
+    excluded = {"investigation_checkpoints", "investigation_shares", "investigation_comments", "users", "organizations", "organization_memberships"}
     changed = True
     while changed:
         changed = False
