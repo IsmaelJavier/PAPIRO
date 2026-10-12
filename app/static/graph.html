@@ -616,7 +616,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
      'saveRelationshipBtn','saveRelationshipEditBtn','shareInvestigationBtn','mergeInvestigationBtn']
       .forEach(id=>{const control=document.getElementById(id);if(control)control.disabled=true;});
   };
-  const detectReadOnlySession=async()=>{
+  window.detectReadOnlySession=async()=>{
     const job=await api(`/jobs/${encodeURIComponent(jobId)}`);
     if(!job?.is_shared){readOnlySession=false;return false;}
     if(!job.is_owner){activateReadOnlyMode();return true;}
@@ -662,7 +662,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   };
   const leaveWithoutSaving=async()=>{
     if(exitInProgress)return;exitInProgress=true;
-    if(readOnlySession){restoreLocalBaseline();location.href='/ui/workspace';return;}
+    if(readOnlySession||!checkpointReady){restoreLocalBaseline();location.href='/ui/workspace';return;}
     setExitProgress('Restaurando el estado inicial… si hay una búsqueda en curso, puede tardar hasta que termine.');
     try{
       await window.beginInvestigationEditingSession();
@@ -730,7 +730,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
      if(!token){location.replace('/ui');return;}
      try{
        await api('/auth/me');
-       const isReadOnly=await detectReadOnlySession();
+       const isReadOnly=await window.detectReadOnlySession();
        if(!isReadOnly)await beginInvestigationEditingSession();
        await loadAll(true);
      }catch(error){
