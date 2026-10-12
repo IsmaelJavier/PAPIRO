@@ -396,8 +396,10 @@ def list_organization_members(organization_id: str):
 
 @organization_router.post("/{organization_id}/members", status_code=201)
 def add_organization_member(organization_id: str, payload: MembershipCreateRequest):
-    if payload.role not in {item.value for item in MembershipRole}:
-        raise HTTPException(status_code=422, detail="Invalid membership role")
+    # Entity managers can add investigator accounts, but cannot promote another
+    # account to entity status; that capability remains with verified admin provisioning.
+    if payload.role != MembershipRole.investigator.value:
+        raise HTTPException(status_code=403, detail="Only administrators can assign the entity role")
     email = str(payload.email).lower()
     with db_session() as session:
         org = session.get(Organization, organization_id)
@@ -406,6 +408,8 @@ def add_organization_member(organization_id: str, payload: MembershipCreateReque
         user = session.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not user:
             raise HTTPException(status_code=404, detail="Active user not found; an administrator must create the account first")
+        if user.global_role != UserRole.investigator:
+            raise HTTPException(status_code=422, detail="Only investigator accounts can be added as investigators")
         existing = session.scalar(select(OrganizationMembership).where(
             OrganizationMembership.organization_id == organization_id,
             OrganizationMembership.user_id == user.id,
@@ -447,8 +451,8 @@ class MembershipRoleUpdateRequest(BaseModel):
 def update_organization_member_role(
     organization_id: str, user_id: str, payload: MembershipRoleUpdateRequest
 ):
-    if payload.role not in {item.value for item in MembershipRole}:
-        raise HTTPException(status_code=422, detail="Invalid membership role")
+    if payload.role != MembershipRole.investigator.value:
+        raise HTTPException(status_code=403, detail="Only administrators can assign the entity role")
     with db_session() as session:
         membership = session.scalar(select(OrganizationMembership).where(
             OrganizationMembership.organization_id == organization_id,
