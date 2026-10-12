@@ -107,7 +107,7 @@ def test_read_only_shared_copy_can_exit_without_checkpoint_or_restore():
     assert "const isReadOnly=await detectReadOnlySession();" in html
     assert "if(!isReadOnly)await beginInvestigationEditingSession();" in html
     # Exit/logout must bypass server-side commit/restore for read-only sessions.
-    assert "if(readOnlySession){restoreLocalBaseline();location.href='/ui/workspace';return;}" in html
+    assert "if(readOnlySession||!checkpointReady){restoreLocalBaseline();location.href='/ui/workspace';return;}" in html
     assert "if(readOnlySession){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}" in html
     # Editing remains unavailable in the UI; server-side authorization remains authoritative.
     assert "activateReadOnlyMode" in html
