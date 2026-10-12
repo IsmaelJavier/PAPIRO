@@ -111,4 +111,7 @@ def test_read_only_shared_copy_can_exit_without_checkpoint_or_restore():
     assert "if(readOnlySession||!checkpointReady){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}" in html
     # Editing remains unavailable in the UI; server-side authorization remains authoritative.
     assert "activateReadOnlyMode" in html
-    assert "This shared copy does not grant editing permission" not in html
+    assert "assessFinding|assessRelationship|assessCorrelation|saveEntity|saveRelationship|openEntityEdit|openRelationshipEdit|attachSelectedFindingsToEntity" in html
+    from pathlib import Path
+    auth_source = (Path(__file__).resolve().parents[1] / "app" / "auth.py").read_text(encoding="utf-8")
+    assert "This shared copy does not grant editing permission" in auth_source
