@@ -609,14 +609,17 @@ def test_merge_requires_review_and_invalidates_review_when_copy_changes(monkeypa
         assert created.status_code == 201, created.text
         share_id = created.json()["share_id"]
         assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/merge").status_code == 409
-        assert client.get(f"/api/v1/jobs/{original_id}/shares/{share_id}/review").status_code == 200
-        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review").status_code == 200
+        review = client.get(f"/api/v1/jobs/{original_id}/shares/{share_id}/review")
+        assert review.status_code == 200
+        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review", json={"snapshot_token": review.json()["snapshot_token"]}).status_code == 200
         share = session.query(api.InvestigationShare).filter_by(id=share_id).one()
         session.get(Job, share.shared_job_id).notes = "changed after review"
         session.flush()
         stale_merge = client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/merge")
         assert stale_merge.status_code == 409, stale_merge.text
-        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review").status_code == 200
+        review = client.get(f"/api/v1/jobs/{original_id}/shares/{share_id}/review")
+        assert review.status_code == 200
+        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review", json={"snapshot_token": review.json()["snapshot_token"]}).status_code == 200
         merged = client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/merge")
         assert merged.status_code == 200, merged.text
         assert session.get(Job, original_id).notes == "changed after review"
@@ -712,7 +715,9 @@ def test_three_way_merge_preserves_non_overlapping_owner_and_collaborator_change
         original.notes = "owner-only notes change"
         copy.investigation_title = "collaborator title change"
         session.flush()
-        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review").status_code == 200
+        review = client.get(f"/api/v1/jobs/{original_id}/shares/{share_id}/review")
+        assert review.status_code == 200
+        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review", json={"snapshot_token": review.json()["snapshot_token"]}).status_code == 200
         merged = client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/merge")
         assert merged.status_code == 200, merged.text
         refreshed_original = session.get(Job, original_id)
@@ -763,7 +768,9 @@ def test_three_way_merge_rejects_conflicting_edits(monkeypatch):
         original.notes = "owner version"
         copy.notes = "collaborator version"
         session.flush()
-        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review").status_code == 200
+        review = client.get(f"/api/v1/jobs/{original_id}/shares/{share_id}/review")
+        assert review.status_code == 200
+        assert client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/review", json={"snapshot_token": review.json()["snapshot_token"]}).status_code == 200
         response = client.post(f"/api/v1/jobs/{original_id}/shares/{share_id}/merge")
         assert response.status_code == 409, response.text
         assert "conflicts" in response.json()["detail"]
