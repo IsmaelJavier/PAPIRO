@@ -54,6 +54,7 @@ class RelevanceAssessment(str, enum.Enum):
 class UserRole(str, enum.Enum):
     superuser = "superuser"
     investigator = "investigator"
+    entity = "entity"
     user = "user"
 
 
@@ -86,6 +87,9 @@ class Organization(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
