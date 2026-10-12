@@ -263,6 +263,121 @@ def _investigation_snapshot_diff(baseline, current):
     return result
 
 
+def _three_way_merge_snapshots(base, current, proposed):
+    """Merge non-overlapping row/field changes and report true concurrent conflicts."""
+    table_meta = {table.name: table for table in _investigation_tables()}
+    base_tables = {item["name"]: item.get("rows", []) for item in base.get("tables", [])}
+    current_tables = {item["name"]: item.get("rows", []) for item in current.get("tables", [])}
+    proposed_tables = {item["name"]: item.get("rows", []) for item in proposed.get("tables", [])}
+    merged = {"version": 1, "tables": []}
+    conflicts = []
+
+    for table in _investigation_tables():
+        name = table.name
+        pk_names = [column.name for column in table.primary_key.columns]
+        def indexed(rows):
+            return {tuple(str(row.get(pk)) for pk in pk_names): row for row in rows}
+        base_rows = indexed(base_tables.get(name, []))
+        current_rows = indexed(current_tables.get(name, []))
+        proposed_rows = indexed(proposed_tables.get(name, []))
+        merged_rows = []
+
+        for key in sorted(set(base_rows) | set(current_rows) | set(proposed_rows)):
+            base_row = base_rows.get(key)
+            current_row = current_rows.get(key)
+            proposed_row = proposed_rows.get(key)
+            row_id = "/".join(key)
+
+            if base_row is None:
+                if current_row is not None and proposed_row is not None:
+                    if current_row == proposed_row:
+                        merged_rows.append(dict(current_row))
+                    else:
+                        conflicts.append({"table": name, "id": row_id, "field": "*", "reason": "same row added differently"})
+                elif current_row is not None:
+                    merged_rows.append(dict(current_row))
+                elif proposed_row is not None:
+                    merged_rows.append(dict(proposed_row))
+                continue
+
+            if current_row is None and proposed_row is None:
+                continue
+            if current_row is None:
+                if proposed_row != base_row:
+                    conflicts.append({"table": name, "id": row_id, "field": "*", "reason": "original deleted a row modified by collaborator"})
+                # Original deletion wins when collaborator left the row untouched.
+                continue
+            if proposed_row is None:
+                if current_row != base_row:
+                    conflicts.append({"table": name, "id": row_id, "field": "*", "reason": "collaborator deleted a row modified in original"})
+                # Collaborator deletion wins when original left the row untouched.
+                continue
+
+            result_row = {}
+            for field in set(base_row) | set(current_row) | set(proposed_row):
+                base_value = base_row.get(field)
+                current_value = current_row.get(field)
+                proposed_value = proposed_row.get(field)
+                if current_value == base_value:
+                    result_row[field] = proposed_value
+                elif proposed_value == base_value or current_value == proposed_value:
+                    result_row[field] = current_value
+                else:
+                    conflicts.append({
+                        "table": name, "id": row_id, "field": field,
+                        "base": _review_value(base_value),
+                        "original": _review_value(current_value),
+                        "proposed": _review_value(proposed_value),
+                    })
+                    result_row[field] = current_value
+            merged_rows.append(result_row)
+
+        merged["tables"].append({"name": name, "rows": merged_rows})
+    return (None if conflicts else merged), conflicts
+
+
+def _make_shared_branch_snapshot(original_snapshot, share):
+    """Refresh a collaborator branch from the merged original without losing collaboration identity."""
+    metadata_tables = {table.name: table for table in _investigation_tables()}
+    id_map = {}
+    for item in original_snapshot.get("tables", []):
+        table = metadata_tables.get(item["name"])
+        if table is None:
+            continue
+        pk = list(table.primary_key.columns)[0].name
+        previous = (share.id_map or {}).get(table.name, {})
+        id_map[table.name] = {
+            str(row[pk]): (
+                share.shared_job_id if table.name == "jobs"
+                else previous.get(str(row[pk]), str(uuid.uuid4()))
+            )
+            for row in item.get("rows", [])
+        }
+
+    branch = {"version": original_snapshot.get("version", 1), "tables": []}
+    for item in original_snapshot.get("tables", []):
+        table = metadata_tables[item["name"]]
+        rows = []
+        pk = list(table.primary_key.columns)[0].name
+        for encoded in item.get("rows", []):
+            row = dict(encoded)
+            old_pk = str(row[pk])
+            row[pk] = id_map[table.name][old_pk]
+            for fk in table.foreign_keys:
+                column_name = fk.parent.name
+                value = row.get(column_name)
+                if value is not None:
+                    mapped = id_map.get(fk.column.table.name, {}).get(str(value))
+                    if mapped is not None:
+                        row[column_name] = mapped
+            if table.name == "jobs":
+                row["owner_user_id"] = share.collaborator_user_id
+                row["organization_id"] = None
+            rows.append(row)
+        branch["tables"].append({"name": item["name"], "rows": rows})
+    return branch, id_map
+
+
 def _restore_investigation_snapshot(session, job_id, snapshot):
     tables, current = _collect_investigation_rows(session, job_id)
     table_by_name = {table.name: table for table in tables}
@@ -876,57 +991,40 @@ def merge_shared_investigation(job_id: str, share_id: str, request: Request):
         current_copy_snapshot = _make_investigation_snapshot(session, share.shared_job_id)
         if share.reviewed_snapshot is None or current_copy_snapshot != share.reviewed_snapshot:
             raise HTTPException(status_code=409, detail="Review the current collaborator changes before pulling or merging them.")
+
         current_baseline = _make_investigation_snapshot(session, job_id)
-        if current_baseline != share.base_snapshot:
-            raise HTTPException(status_code=409, detail="The original changed after sharing. Reconcile the changes before merging.")
-        tables, original_rows = _collect_investigation_rows(session, job_id)
-        shared_tables, shared_rows = _collect_investigation_rows(session, share.shared_job_id)
-        reverse_map = {table: {copy_id: original_id for original_id, copy_id in mapping.items()}
-                       for table, mapping in share.id_map.items()}
-        target_ids = {}
-        for table in shared_tables:
-            pk = list(table.primary_key.columns)[0].name
-            target_ids[table.name] = {}
-            for row in shared_rows.get(table.name, []):
-                copied_id = str(row[pk])
-                target_ids[table.name][copied_id] = (
-                    job_id if table.name == "jobs" else
-                    reverse_map.get(table.name, {}).get(copied_id, str(uuid.uuid4()))
-                )
-        for table in reversed(tables):
-            if table.name == "jobs":
-                continue
-            for row in original_rows.get(table.name, []):
-                keys = [column == row[column.name] for column in table.primary_key.columns]
-                if keys:
-                    session.execute(delete(table).where(and_(*keys)))
-        for table in shared_tables:
-            if table.name == "jobs":
-                continue
-            for source_row in shared_rows.get(table.name, []):
-                row = dict(source_row)
-                pk = list(table.primary_key.columns)[0].name
-                row[pk] = target_ids[table.name][str(source_row[pk])]
-                for fk in table.foreign_keys:
-                    parent_map = target_ids.get(fk.column.table.name, {})
-                    if str(row.get(fk.parent.name)) in parent_map:
-                        row[fk.parent.name] = parent_map[str(row[fk.parent.name])]
-                session.execute(insert(table).values(**row))
-        shared_job = session.get(Job, share.shared_job_id)
-        original.investigation_title = shared_job.investigation_title
-        original.notes = shared_job.notes
-        original.input_value = shared_job.input_value
-        session.flush()
-        # Advance the collaboration baseline so the same share can be merged again
-        # after further collaborator edits, while still detecting concurrent changes.
-        share.base_snapshot = _make_investigation_snapshot(session, job_id)
+        normalized_proposal = _normalize_shared_snapshot(current_copy_snapshot, share, share.base_snapshot)
+        merged_snapshot, conflicts = _three_way_merge_snapshots(
+            share.base_snapshot, current_baseline, normalized_proposal
+        )
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "There are concurrent changes that require manual reconciliation.",
+                    "conflicts": conflicts[:100],
+                    "total_conflicts": len(conflicts),
+                },
+            )
+
+        # Apply the merged snapshot in place; the original Job identity is retained.
+        _restore_investigation_snapshot(session, job_id, merged_snapshot)
+        updated_baseline = _make_investigation_snapshot(session, job_id)
+
+        # Bring the collaborator branch up to date with the merged original, just
+        # as a merged pull request's head branch can be synchronized with its base.
+        refreshed_branch, refreshed_id_map = _make_shared_branch_snapshot(updated_baseline, share)
+        _restore_investigation_snapshot(session, share.shared_job_id, refreshed_branch)
+        share.base_snapshot = updated_baseline
+        share.id_map = refreshed_id_map
         share.reviewed_snapshot = None
         share.reviewed_at = None
-        share.id_map = {
-            table_name: {original_id: copy_id for copy_id, original_id in mapping.items()}
-            for table_name, mapping in target_ids.items()
+        session.flush()
+        return {
+            "job_id": job_id, "share_id": share_id, "status": "merged",
+            "baseline_advanced": True, "branch_synchronized": True,
+            "conflicts": [],
         }
-        return {"job_id": job_id, "share_id": share_id, "status": "merged", "baseline_advanced": True}
 
 
 @router.post("/jobs/{job_id}/checkpoint")
