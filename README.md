@@ -291,3 +291,17 @@ Compartir una investigación crea una copia independiente con permiso de lectura
 - La UI del grafo almacena el bearer token en `localStorage`; antes de producción conviene valorar una cookie `HttpOnly` y añadir protección contra fuerza bruta.
 - CI ejecuta las pruebas de Python, comprobaciones de sintaxis JavaScript y una prueba de humo de migraciones sobre PostgreSQL, incluidas segundas ejecuciones para comprobar idempotencia. Antes de desplegar, prueba las migraciones sobre una copia de la base real.
 - El historial Git puede conservar versiones antiguas de `.env`. Si contuvo credenciales reales, rótalas y sanea el historial antes de compartir la rama.
+
+
+
+## Colaboración de investigaciones: revisión antes de integrar
+
+La rama `feature/collaboration-pull-request-flow` añade un flujo de propuesta tipo pull request:
+
+1. Compartir crea una copia independiente para el investigador colaborador.
+2. El propietario original revisa la diferencia de esa copia desde `Pull / Merge`.
+3. El propietario marca como revisada una versión concreta; cualquier edición posterior invalida esa revisión.
+4. La API rechaza la integración si no existe revisión vigente o si el original cambió desde la base compartida.
+5. El hilo de comentarios se consulta por `share_id`, por lo que tanto el propietario original como el colaborador pueden ver los comentarios permitidos por su rol.
+
+Antes de desplegar esta rama, aplicar la migración aditiva `migrations/008_investigation_share_review.sql` sobre la base de datos existente. Esta migración solo agrega dos columnas a `investigation_shares`; no elimina investigaciones, copias ni comentarios.
