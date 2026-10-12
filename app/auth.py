@@ -440,6 +440,15 @@ def remove_organization_member(organization_id: str, user_id: str):
             raise HTTPException(status_code=404, detail="Membership not found")
         if membership.user_id == membership.organization.created_by_user_id:
             raise HTTPException(status_code=409, detail="Transfer organization ownership before removing its creator")
+        if membership.role == MembershipRole.entity:
+            other_entity_manager = session.scalar(select(OrganizationMembership.id).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.is_active.is_(True),
+                OrganizationMembership.role == MembershipRole.entity,
+                OrganizationMembership.user_id != user_id,
+            ))
+            if not other_entity_manager:
+                raise HTTPException(status_code=409, detail="An organization must retain at least one active entity manager")
         membership.is_active = False
 
 
