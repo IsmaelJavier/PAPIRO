@@ -454,16 +454,17 @@ def list_jobs(request: Request):
     user_id = request.state.current_user_id
 
     with db_session() as session:
-        organization_ids = select(OrganizationMembership.organization_id).where(
+        entity_organization_ids = select(OrganizationMembership.organization_id).where(
             OrganizationMembership.user_id == user_id,
             OrganizationMembership.is_active.is_(True),
+            OrganizationMembership.role == MembershipRole.entity,
         )
         jobs = session.scalars(
             select(Job)
             .where(
                 or_(
                     Job.owner_user_id == user_id,
-                    Job.organization_id.in_(organization_ids),
+                    Job.organization_id.in_(entity_organization_ids),
                 )
             )
             .order_by(Job.created_at.desc())
