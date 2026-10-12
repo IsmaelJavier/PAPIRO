@@ -215,6 +215,9 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
             raise HTTPException(status_code=403, detail="Superuser role required")
         if "organization_id" in params:
             org_id = params["organization_id"]
+            organization = session.get(Organization, org_id)
+            if not organization or not organization.is_active or organization.verified_at is None:
+                raise HTTPException(status_code=404, detail="Verified organization not found")
             membership = session.scalar(select(OrganizationMembership).where(
                 OrganizationMembership.organization_id == org_id,
                 OrganizationMembership.user_id == actor.id,
@@ -251,12 +254,13 @@ def authorize_api_request(request: Request, user: User = Depends(get_current_use
                     return
                 raise HTTPException(status_code=403, detail="The original investigator can review this copy but cannot edit it directly")
             if job.organization_id:
+                organization = session.get(Organization, job.organization_id)
                 membership = session.scalar(select(OrganizationMembership).where(
                     OrganizationMembership.organization_id == job.organization_id,
                     OrganizationMembership.user_id == actor.id,
                     OrganizationMembership.is_active.is_(True),
                 ))
-                if membership and membership.role == MembershipRole.entity:
+                if organization and organization.is_active and organization.verified_at is not None and membership and membership.role == MembershipRole.entity:
                     if method == "GET":
                         return
                     raise HTTPException(status_code=403, detail="Entity managers cannot modify investigation content")
@@ -323,7 +327,7 @@ def admin_create_user(payload: AdminUserCreateRequest, request: Request):
     role = payload.global_role
     if role == UserRole.superuser.value:
         raise HTTPException(status_code=403, detail="The platform administrator is unique and cannot be created from this endpoint")
-    if role not in {item.value for item in UserRole if item != UserRole.superuser}:
+    if role not in {UserRole.investigator.value, UserRole.user.value}:
         raise HTTPException(status_code=422, detail="Invalid global role")
     email = str(payload.email).lower()
     with db_session() as session:
@@ -534,8 +538,8 @@ def create_organization(payload: OrganizationCreateRequest, request: Request):
 def list_organization_members(organization_id: str):
     with db_session() as session:
         org = session.get(Organization, organization_id)
-        if not org:
-            raise HTTPException(status_code=404, detail="Organization not found")
+        if not org or not org.is_active or org.verified_at is None:
+            raise HTTPException(status_code=404, detail="Verified organization not found")
         rows = session.scalars(select(OrganizationMembership).where(
             OrganizationMembership.organization_id == organization_id,
             OrganizationMembership.is_active.is_(True),
@@ -555,8 +559,8 @@ def add_organization_member(organization_id: str, payload: MembershipCreateReque
     email = str(payload.email).lower()
     with db_session() as session:
         org = session.get(Organization, organization_id)
-        if not org or not org.is_active:
-            raise HTTPException(status_code=404, detail="Organization not found")
+        if not org or not org.is_active or org.verified_at is None:
+            raise HTTPException(status_code=404, detail="Verified organization not found")
         user = session.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not user:
             raise HTTPException(status_code=404, detail="Active user not found; an administrator must create the account first")
