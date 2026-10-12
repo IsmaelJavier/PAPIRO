@@ -528,6 +528,19 @@ def delete_investigation(job_id: str, request: Request):
         ))
         if not can_delete:
             raise HTTPException(status_code=403, detail="Only the investigation owner can delete it or revoke its shared copy")
+        # Removing an original also removes every collaborator copy first; otherwise
+        # the copies would remain as orphaned investigations after share metadata cascades.
+        if share is None:
+            related_shares = session.scalars(select(InvestigationShare).where(
+                InvestigationShare.original_job_id == job_id
+            )).all()
+            for related_share in related_shares:
+                copy_tables, copy_rows = _collect_investigation_rows(session, related_share.shared_job_id)
+                for copy_table in reversed(copy_tables):
+                    for copy_row in copy_rows.get(copy_table.name, []):
+                        copy_keys = [column == copy_row[column.name] for column in copy_table.primary_key.columns]
+                        if copy_keys:
+                            session.execute(delete(copy_table).where(and_(*copy_keys)))
         tables, rows_by_table = _collect_investigation_rows(session, job_id)
         # Remove dependent rows in reverse FK order, then the investigation.
         for table in reversed(tables):
