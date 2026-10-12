@@ -45,3 +45,8 @@ def test_investigation_ui_has_autosave_exit_and_logout_confirmation():
         assert 'id="saveAndLeave"' in response.text
         assert "DOMContentLoaded" in response.text
         assert "Vista guardada automáticamente" in response.text
+        assert "/checkpoint" in response.text
+        assert "/checkpoint/restore" in response.text
+        assert "/checkpoint/commit" in response.text
+        assert "revierte los cambios de esta sesión" in response.text
+        assert "rememberLocalBaseline" in response.text
