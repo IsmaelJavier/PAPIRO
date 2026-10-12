@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import authorize_api_request
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.db import db_session
-from app.models import Correlation, Entity, Finding, MembershipRole, OrganizationMembership, Relationship
+from app.models import Correlation, Entity, Finding, Job, MembershipRole, OrganizationMembership, Relationship
 from app.repository import Repository
 from app.schemas import (
     CorrelationAssessmentRequest,
@@ -193,6 +193,68 @@ def manual_name_search(job_id: str, payload: ManualNameSearchRequest):
             raise HTTPException(status_code=404, detail="job not found")
     task = process_manual_person_name_search.delay(job_id, query)
     return {"job_id": job_id, "query": query, "task_id": task.id, "status": "queued"}
+
+
+@router.get(
+    "/jobs",
+    response_model=list[JobResponse],
+)
+def list_jobs(request: Request):
+    """List investigations visible to the authenticated user, newest first."""
+    user_id = request.state.current_user_id
+
+    with db_session() as session:
+        organization_ids = select(OrganizationMembership.organization_id).where(
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.is_active.is_(True),
+        )
+        jobs = session.scalars(
+            select(Job)
+            .where(
+                or_(
+                    Job.owner_user_id == user_id,
+                    Job.organization_id.in_(organization_ids),
+                )
+            )
+            .order_by(Job.created_at.desc())
+        ).all()
+
+        result = []
+        for job in jobs:
+            result.append(
+                JobResponse(
+                    id=job.id,
+                    input_value=job.input_value,
+                    input_type=job.input_type,
+                    status=job.status.value,
+                    error=job.error,
+                    created_at=job.created_at,
+                    started_at=job.started_at,
+                    completed_at=job.completed_at,
+                    finding_count=session.scalar(
+                        select(func.count(Finding.id)).where(Finding.job_id == job.id)
+                    ) or 0,
+                    correlation_count=session.scalar(
+                        select(func.count(Correlation.id)).where(Correlation.job_id == job.id)
+                    ) or 0,
+                    module_runs=[
+                        {
+                            "id": run.id,
+                            "module": run.module,
+                            "source": run.source,
+                            "query": run.query,
+                            "status": run.status.value,
+                            "http_status": run.http_status,
+                            "error": run.error,
+                            "rate_limit_remaining": run.rate_limit_remaining,
+                            "started_at": run.started_at,
+                            "finished_at": run.finished_at,
+                        }
+                        for run in job.runs
+                    ],
+                )
+            )
+        return result
 
 
 @router.get(
