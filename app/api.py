@@ -115,7 +115,7 @@ def _collect_investigation_rows(session, job_id):
     for table in tables:
         if table.name == "jobs":
             rows = session.execute(
-                select(table).where(table.c.id == job_id)
+                select(table).where(table.c.id == job_id).order_by(*table.primary_key.columns)
             ).mappings().all()
         else:
             conditions = []
@@ -127,7 +127,7 @@ def _collect_investigation_rows(session, job_id):
                 if values:
                     conditions.append(fk.parent.in_(values))
             rows = (
-                session.execute(select(table).where(or_(*conditions))).mappings().all()
+                session.execute(select(table).where(or_(*conditions)).order_by(*table.primary_key.columns)).mappings().all()
                 if conditions else []
             )
         normalized = [dict(row) for row in rows]
