@@ -309,6 +309,10 @@ class MembershipCreateRequest(BaseModel):
     role: str = "investigator"
 
 
+class MembershipInvitationDecision(BaseModel):
+    decision: str
+
+
 admin_router = APIRouter(
     prefix="/api/v1/admin",
     tags=["administration"],
@@ -502,6 +506,7 @@ def list_organizations(request: Request):
             .where(
                 OrganizationMembership.user_id == user_id,
                 OrganizationMembership.is_active.is_(True),
+                OrganizationMembership.invitation_status == "accepted",
                 Organization.is_active.is_(True),
                 Organization.verified_at.is_not(None),
             )
@@ -537,6 +542,65 @@ def create_organization(payload: OrganizationCreateRequest, request: Request):
         return {"id": org.id, "name": org.name, "slug": org.slug, "role": membership.role.value}
 
 
+@organization_router.get("/invitations/mine")
+def list_my_organization_invitations(request: Request):
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        rows = session.execute(
+            select(OrganizationMembership, Organization)
+            .join(Organization, Organization.id == OrganizationMembership.organization_id)
+            .where(
+                OrganizationMembership.user_id == user_id,
+                OrganizationMembership.role == MembershipRole.investigator,
+                OrganizationMembership.invitation_status == "pending",
+                Organization.is_active.is_(True),
+                Organization.verified_at.is_not(None),
+            )
+            .order_by(OrganizationMembership.created_at.asc())
+        ).all()
+        return [{
+            "invitation_id": membership.id,
+            "organization_id": organization.id,
+            "organization_name": organization.name,
+            "organization_identifier": organization.slug,
+            "invited_at": membership.created_at,
+            "invited_by_user_id": membership.invited_by_user_id,
+        } for membership, organization in rows]
+
+
+@organization_router.post("/invitations/{invitation_id}/respond")
+def respond_to_organization_invitation(
+    invitation_id: str, payload: MembershipInvitationDecision, request: Request
+):
+    decision = payload.decision.strip().lower()
+    if decision not in {"accept", "reject"}:
+        raise HTTPException(status_code=422, detail="Decision must be accept or reject")
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        membership = session.scalar(
+            select(OrganizationMembership)
+            .where(OrganizationMembership.id == invitation_id)
+            .with_for_update()
+        )
+        if not membership or membership.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Invitation not found")
+        if membership.role != MembershipRole.investigator or membership.invitation_status != "pending":
+            raise HTTPException(status_code=409, detail="This invitation has already been answered or is not valid")
+        organization = session.get(Organization, membership.organization_id)
+        if not organization or not organization.is_active or organization.verified_at is None:
+            raise HTTPException(status_code=404, detail="Verified organization not found")
+        membership.invitation_status = "accepted" if decision == "accept" else "rejected"
+        membership.is_active = decision == "accept"
+        membership.responded_at = datetime.now(timezone.utc)
+        session.flush()
+        return {
+            "invitation_id": membership.id,
+            "status": membership.invitation_status,
+            "organization_id": organization.id,
+            "organization_name": organization.name,
+        }
+
+
 @organization_router.get("/{organization_id}/members")
 def list_organization_members(organization_id: str):
     with db_session() as session:
@@ -545,16 +609,27 @@ def list_organization_members(organization_id: str):
             raise HTTPException(status_code=404, detail="Verified organization not found")
         rows = session.scalars(select(OrganizationMembership).where(
             OrganizationMembership.organization_id == organization_id,
-            OrganizationMembership.is_active.is_(True),
+            (
+                OrganizationMembership.is_active.is_(True)
+                | (OrganizationMembership.invitation_status == "pending")
+            ),
         )).all()
         return [
-            {"user_id": row.user_id, "email": row.user.email, "role": row.role.value}
+            {
+                "user_id": row.user_id,
+                "email": row.user.email,
+                "role": row.role.value,
+                "invitation_status": row.invitation_status,
+                "is_active": row.is_active,
+                "invited_at": row.created_at,
+                "responded_at": row.responded_at,
+            }
             for row in rows
         ]
 
 
 @organization_router.post("/{organization_id}/members", status_code=201)
-def add_organization_member(organization_id: str, payload: MembershipCreateRequest):
+def add_organization_member(organization_id: str, payload: MembershipCreateRequest, request: Request):
     # Entity managers can add investigator accounts, but cannot promote another
     # account to entity status; that capability remains with verified admin provisioning.
     if payload.role != MembershipRole.investigator.value:
@@ -574,18 +649,28 @@ def add_organization_member(organization_id: str, payload: MembershipCreateReque
             OrganizationMembership.user_id == user.id,
         ))
         if existing:
-            if existing.is_active:
+            if existing.is_active and existing.invitation_status == "accepted":
                 raise HTTPException(status_code=409, detail="User is already a member")
-            existing.is_active = True
+            if existing.invitation_status == "pending":
+                raise HTTPException(status_code=409, detail="An invitation is already pending")
+            existing.is_active = False
             existing.role = MembershipRole(payload.role)
+            existing.invitation_status = "pending"
+            existing.invited_by_user_id = request.state.current_user_id
+            existing.responded_at = None
             session.flush()
-            return {"user_id": user.id, "email": user.email, "role": existing.role.value}
+            return {"user_id": user.id, "email": user.email, "role": existing.role.value, "invitation_status": existing.invitation_status}
         membership = OrganizationMembership(
-            organization_id=organization_id, user_id=user.id, role=MembershipRole(payload.role)
+            organization_id=organization_id,
+            user_id=user.id,
+            role=MembershipRole(payload.role),
+            is_active=False,
+            invitation_status="pending",
+            invited_by_user_id=request.state.current_user_id,
         )
         session.add(membership)
         session.flush()
-        return {"user_id": user.id, "email": user.email, "role": membership.role.value}
+        return {"user_id": user.id, "email": user.email, "role": membership.role.value, "invitation_status": membership.invitation_status}
 
 
 @organization_router.delete("/{organization_id}/members/{user_id}", status_code=204)
