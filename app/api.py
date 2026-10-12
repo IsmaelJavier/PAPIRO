@@ -194,6 +194,17 @@ def _normalize_shared_snapshot(snapshot, share, baseline):
     return normalized
 
 
+def _review_value(value, limit=350):
+    """Keep review payloads readable and bounded even for large evidence fields."""
+    if isinstance(value, (dict, list)):
+        value = str(value)
+    elif value is None:
+        return None
+    else:
+        value = str(value)
+    return value if len(value) <= limit else value[:limit] + "…"
+
+
 def _investigation_snapshot_diff(baseline, current):
     """Return a bounded row-level diff for the proposal review screen."""
     before_tables = {item["name"]: item.get("rows", []) for item in baseline.get("tables", [])}
@@ -220,14 +231,34 @@ def _investigation_snapshot_diff(baseline, current):
             for key in common if before[key] != after[key]
         ]
         if added_keys or deleted_keys or modified:
+            details = []
+            for key in added_keys[:50]:
+                details.append({
+                    "operation": "added", "id": "/".join(key),
+                    "values": {name: _review_value(value) for name, value in after[key].items() if name not in pk_names},
+                })
+            for key in deleted_keys[:50]:
+                details.append({
+                    "operation": "deleted", "id": "/".join(key),
+                    "values": {name: _review_value(value) for name, value in before[key].items() if name not in pk_names},
+                })
+            for key in common:
+                if before[key] == after[key]:
+                    continue
+                fields = sorted(field for field in set(before[key]) | set(after[key]) if before[key].get(field) != after[key].get(field))
+                details.append({
+                    "operation": "modified", "id": "/".join(key), "fields": fields,
+                    "values": [
+                        {"field": field, "before": _review_value(before[key].get(field)), "after": _review_value(after[key].get(field))}
+                        for field in fields[:30]
+                    ],
+                })
+                if sum(1 for item in details if item["operation"] == "modified") >= 50:
+                    break
             result.append({
                 "table": table_name, "added": len(added_keys),
                 "deleted": len(deleted_keys), "modified": len(modified),
-                "details": (
-                    [{"operation": "added", "id": "/".join(key)} for key in added_keys[:50]]
-                    + [{"operation": "deleted", "id": "/".join(key)} for key in deleted_keys[:50]]
-                    + [{"operation": "modified", **row} for row in modified[:50]]
-                ),
+                "details": details,
             })
     return result
 
