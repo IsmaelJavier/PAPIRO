@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import hashlib
+import json
 import enum as py_enum
 import uuid
 
@@ -155,6 +157,11 @@ def _make_investigation_snapshot(session, job_id):
             for table in tables
         ],
     }
+
+
+def _snapshot_token(snapshot):
+    canonical = json.dumps(snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _normalize_shared_snapshot(snapshot, share, baseline):
@@ -927,11 +934,12 @@ def review_shared_investigation(job_id: str, share_id: str, request: Request):
             "change_count": sum(item["added"] + item["deleted"] + item["modified"] for item in changes),
             "reviewed": share.reviewed_snapshot is not None and current_copy == share.reviewed_snapshot,
             "reviewed_at": share.reviewed_at,
+            "snapshot_token": _snapshot_token(current_copy),
         }
 
 
 @router.post("/jobs/{job_id}/shares/{share_id}/review")
-def mark_shared_investigation_reviewed(job_id: str, share_id: str, request: Request):
+def mark_shared_investigation_reviewed(job_id: str, share_id: str, payload: dict, request: Request):
     """Record the exact collaborator snapshot that the owner has reviewed."""
     user_id = request.state.current_user_id
     with db_session() as session:
@@ -944,7 +952,14 @@ def mark_shared_investigation_reviewed(job_id: str, share_id: str, request: Requ
         locked_copy = session.scalar(select(Job).where(Job.id == share.shared_job_id).with_for_update())
         if not locked_copy:
             raise HTTPException(status_code=404, detail="Shared investigation copy not found")
-        share.reviewed_snapshot = _make_investigation_snapshot(session, share.shared_job_id)
+        current_copy = _make_investigation_snapshot(session, share.shared_job_id)
+        expected_token = str(payload.get("snapshot_token", ""))
+        if not expected_token or expected_token != _snapshot_token(current_copy):
+            raise HTTPException(
+                status_code=409,
+                detail="The collaborator copy changed after the review was loaded. Reload the proposal and review it again.",
+            )
+        share.reviewed_snapshot = current_copy
         share.reviewed_at = datetime.now(timezone.utc)
         session.flush()
         return {"share_id": share.id, "reviewed": True, "reviewed_at": share.reviewed_at}
