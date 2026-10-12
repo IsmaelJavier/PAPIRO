@@ -104,7 +104,7 @@ def test_read_only_shared_copy_can_exit_without_checkpoint_or_restore():
     assert response.status_code == 200
     html = response.text
     # A read-only copy must be detected before opening an editing checkpoint.
-    assert "const isReadOnly=await detectReadOnlySession();" in html
+    assert "const isReadOnly=await window.detectReadOnlySession();" in html
     assert "if(!isReadOnly)await beginInvestigationEditingSession();" in html
     # Exit/logout must bypass server-side commit/restore for read-only sessions.
     assert "if(readOnlySession||!checkpointReady){restoreLocalBaseline();location.href='/ui/workspace';return;}" in html
