@@ -572,13 +572,15 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   const openSessionModal=()=>{sessionModal.style.display='flex';};
   const closeSessionModal=()=>{if(!exitInProgress)sessionModal.style.display='none';};
   const saveView=()=>{if(cy)savePositions();persistHidden();};
-  const rememberLocalBaseline=()=>{
-    if(!localStorage.getItem(baselineKey)){
-      localStorage.setItem(baselineKey,JSON.stringify({
-        positions:localStorage.getItem(positionKey),
-        hidden:localStorage.getItem(hiddenKey)
-      }));
-    }
+  const rememberLocalBaseline=(checkpointId)=>{
+    let existing=null;
+    try{existing=JSON.parse(localStorage.getItem(baselineKey)||'null');}catch{}
+    if(existing?.checkpointId===checkpointId)return;
+    localStorage.setItem(baselineKey,JSON.stringify({
+      checkpointId,
+      positions:localStorage.getItem(positionKey),
+      hidden:localStorage.getItem(hiddenKey)
+    }));
   };
   const restoreLocalBaseline=()=>{
     let baseline=null;
@@ -623,7 +625,7 @@ document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElem
   window.beginInvestigationEditingSession=async()=>{
     if(checkpointReady)return;
     const checkpoint=await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint`,{method:'POST'});
-    rememberLocalBaseline();
+    rememberLocalBaseline(checkpoint.checkpoint_id);
     checkpointReady=true;
     return checkpoint;
   };
