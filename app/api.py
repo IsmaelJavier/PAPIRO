@@ -519,8 +519,14 @@ def delete_investigation(job_id: str, request: Request):
         if not job:
             raise HTTPException(status_code=404, detail="Investigation not found")
         actor = session.get(User, user_id)
-        if not actor or (actor.global_role != UserRole.superuser and job.owner_user_id != user_id):
-            raise HTTPException(status_code=403, detail="Only the owner can delete this investigation")
+        share = session.scalar(select(InvestigationShare).where(InvestigationShare.shared_job_id == job_id))
+        can_delete = bool(actor and (
+            actor.global_role == UserRole.superuser
+            or job.owner_user_id == user_id
+            or (share and share.owner_user_id == user_id)
+        ))
+        if not can_delete:
+            raise HTTPException(status_code=403, detail="Only the investigation owner can delete it or revoke its shared copy")
         tables, rows_by_table = _collect_investigation_rows(session, job_id)
         # Remove dependent rows in reverse FK order, then the investigation.
         for table in reversed(tables):
