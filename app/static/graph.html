@@ -581,7 +581,32 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   let checkpointReady=false;
   let checkpointPromise=null;
   let exitInProgress=false;
-  let readOnlySession=false;
+  // Fail closed until the server confirms that this investigation is editable.
+  let readOnlySession=true;
+  document.addEventListener('click',event=>{
+    if(!readOnlySession)return;
+    const button=event.target.closest('button');
+    if(!button)return;
+    const handler=button.getAttribute('onclick')||'';
+    const mutatingIds=new Set(['manualSearchBtn','createEntityBtn','saveEntityBtn','saveEntityEditBtn',
+      'saveRelationshipBtn','saveRelationshipEditBtn','shareInvestigationBtn','mergeInvestigationBtn']);
+    if(mutatingIds.has(button.id)||/assessFinding|assessRelationship|assessCorrelation|saveEntity|saveRelationship|openEntityEdit|openRelationshipEdit|attachSelectedFindingsToEntity/.test(handler)){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  },true);
+  document.addEventListener('keydown',event=>{
+    if(readOnlySession&&event.target?.id==='manualSearch'&&event.key==='Enter'){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  },true);
+  document.addEventListener('submit',event=>{
+    if(readOnlySession&&event.target?.id==='shareInvestigationForm'){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  },true);
   const openSessionModal=()=>{sessionModal.style.display='flex';};
   const activateReadOnlyMode=()=>{
     readOnlySession=true;
@@ -590,25 +615,15 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
     ['manualSearch','manualSearchBtn','createEntityBtn','saveEntityBtn','saveEntityEditBtn',
      'saveRelationshipBtn','saveRelationshipEditBtn','shareInvestigationBtn','mergeInvestigationBtn']
       .forEach(id=>{const control=document.getElementById(id);if(control)control.disabled=true;});
-    // Detail panels render assessment/edit actions dynamically. Block their mutating
-    // inline handlers too, while preserving navigation and local graph-view controls.
-    document.addEventListener('click',event=>{
-      const button=event.target.closest('button');
-      if(!button)return;
-      const handler=button.getAttribute('onclick')||'';
-      if(/assessFinding|assessRelationship|assessCorrelation|saveEntity|saveRelationship|openEntityEdit|openRelationshipEdit|attachSelectedFindingsToEntity/.test(handler)){
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    },true);
   };
   const detectReadOnlySession=async()=>{
     const job=await api(`/jobs/${encodeURIComponent(jobId)}`);
-    if(!job?.is_shared)return false;
+    if(!job?.is_shared){readOnlySession=false;return false;}
     if(!job.is_owner){activateReadOnlyMode();return true;}
     const shares=await api('/shared-investigations');
     const share=shares.find(item=>item.job_id===jobId);
     if(share && share.permission!=='edit'){activateReadOnlyMode();return true;}
+    readOnlySession=false;
     return false;
   };
   const setExitProgress=message=>{const status=document.getElementById('exitProgress');if(status){status.textContent=message||'';status.hidden=!message;}};
