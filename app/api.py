@@ -1,10 +1,16 @@
+from datetime import datetime, timezone
+import enum as py_enum
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.auth import authorize_api_request
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, delete, func, insert, or_, select, update
 
-from app.db import db_session
-from app.models import Correlation, Entity, Finding, Job, JobStatus, MembershipRole, OrganizationMembership, Relationship
+from app.db import Base, db_session
+from app.models import (
+    Correlation, Entity, Finding, InvestigationCheckpoint, Job, JobStatus,
+    MembershipRole, OrganizationMembership, Relationship, User, UserRole,
+)
 from app.repository import Repository
 from app.schemas import (
     CorrelationAssessmentRequest,
@@ -31,6 +37,183 @@ from app.tasks import process_person_name_job, process_manual_person_name_search
 
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(authorize_api_request)])
+
+
+# Snapshot only data owned by an investigation. Authentication/organization tables
+# and the checkpoint table itself are deliberately outside the snapshot boundary.
+def _investigation_tables():
+    metadata_tables = Base.metadata.tables
+    scoped = {"jobs"}
+    excluded = {"investigation_checkpoints", "users", "organizations", "organization_memberships"}
+    changed = True
+    while changed:
+        changed = False
+        for table in metadata_tables.values():
+            if table.name in scoped or table.name in excluded:
+                continue
+            if any(fk.column.table.name in scoped for fk in table.foreign_keys):
+                scoped.add(table.name)
+                changed = True
+
+    ordered = []
+    pending = {name for name in scoped if name != "jobs"}
+    ordered.append(metadata_tables["jobs"])
+    while pending:
+        ready = sorted(
+            name for name in pending
+            if all(
+                fk.column.table.name not in scoped
+                or fk.column.table.name in {table.name for table in ordered}
+                for fk in metadata_tables[name].foreign_keys
+            )
+        )
+        if not ready:
+            raise RuntimeError("Could not order investigation tables by foreign-key dependencies")
+        ordered.extend(metadata_tables[name] for name in ready)
+        pending.difference_update(ready)
+    return ordered
+
+
+def _encode_snapshot_value(value):
+    if isinstance(value, datetime):
+        return {"$datetime": value.isoformat()}
+    if isinstance(value, py_enum.Enum):
+        return {"$enum": value.value}
+    if isinstance(value, dict):
+        return {key: _encode_snapshot_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_encode_snapshot_value(item) for item in value]
+    return value
+
+
+def _decode_snapshot_value(value, column=None):
+    if isinstance(value, dict) and "$datetime" in value:
+        return datetime.fromisoformat(value["$datetime"])
+    if isinstance(value, dict) and "$enum" in value:
+        enum_class = getattr(getattr(column, "type", None), "enum_class", None)
+        raw = value["$enum"]
+        if enum_class:
+            try:
+                return enum_class(raw)
+            except ValueError:
+                return enum_class[raw]
+        return raw
+    if isinstance(value, dict):
+        return {key: _decode_snapshot_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_decode_snapshot_value(item) for item in value]
+    return value
+
+
+def _collect_investigation_rows(session, job_id):
+    tables = _investigation_tables()
+    scoped_names = {table.name for table in tables}
+    collected = {}
+    parent_values = {}
+    for table in tables:
+        if table.name == "jobs":
+            rows = session.execute(
+                select(table).where(table.c.id == job_id)
+            ).mappings().all()
+        else:
+            conditions = []
+            for fk in table.foreign_keys:
+                parent = fk.column.table.name
+                if parent not in scoped_names:
+                    continue
+                values = parent_values.get((parent, fk.column.name), [])
+                if values:
+                    conditions.append(fk.parent.in_(values))
+            rows = (
+                session.execute(select(table).where(or_(*conditions))).mappings().all()
+                if conditions else []
+            )
+        normalized = [dict(row) for row in rows]
+        collected[table.name] = normalized
+        for row in normalized:
+            for column in table.columns:
+                parent_values.setdefault((table.name, column.name), []).append(row[column.name])
+    return tables, collected
+
+
+def _make_investigation_snapshot(session, job_id):
+    tables, collected = _collect_investigation_rows(session, job_id)
+    if not collected.get("jobs"):
+        raise HTTPException(status_code=404, detail="job not found")
+    return {
+        "version": 1,
+        "tables": [
+            {
+                "name": table.name,
+                "rows": [
+                    {key: _encode_snapshot_value(value) for key, value in row.items()}
+                    for row in collected[table.name]
+                ],
+            }
+            for table in tables
+        ],
+    }
+
+
+def _restore_investigation_snapshot(session, job_id, snapshot):
+    tables, current = _collect_investigation_rows(session, job_id)
+    table_by_name = {table.name: table for table in tables}
+    snapshot_rows = {item["name"]: item["rows"] for item in snapshot.get("tables", [])}
+    job_table = table_by_name["jobs"]
+    baseline_jobs = snapshot_rows.get("jobs", [])
+    if not baseline_jobs:
+        raise RuntimeError("Checkpoint does not contain the investigation row")
+
+    # Delete current child records in reverse dependency order, but retain the
+    # jobs row so references and concurrent readers never observe a missing job.
+    for table in reversed(tables):
+        if table.name == "jobs":
+            continue
+        for row in current.get(table.name, []):
+            keys = [column == row[column.name] for column in table.primary_key.columns]
+            if keys:
+                session.execute(delete(table).where(and_(*keys)))
+
+    # Restore the existing job in place, then reinsert its child records in
+    # dependency order so all foreign keys point to restored baseline records.
+    job_values = {
+        column.name: _decode_snapshot_value(baseline_jobs[0][column.name], column)
+        for column in job_table.columns
+        if column.name in baseline_jobs[0] and column.name != "id"
+    }
+    session.execute(update(job_table).where(job_table.c.id == job_id).values(**job_values))
+
+    for table in tables:
+        if table.name == "jobs":
+            continue
+        for encoded_row in snapshot_rows.get(table.name, []):
+            row = {
+                column.name: _decode_snapshot_value(encoded_row[column.name], column)
+                for column in table.columns
+                if column.name in encoded_row
+            }
+            session.execute(insert(table).values(**row))
+
+
+def _require_investigator_job(session, job_id, user_id):
+    job = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    user = session.get(User, user_id)
+    if user and user.global_role == UserRole.superuser:
+        return job
+    if job.owner_user_id == user_id:
+        return job
+    if job.organization_id:
+        membership = session.scalar(select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == job.organization_id,
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.is_active.is_(True),
+            OrganizationMembership.role == MembershipRole.investigator,
+        ))
+        if membership:
+            return job
+    raise HTTPException(status_code=403, detail="Investigator access to this investigation is required")
 
 
 def correlation_to_response(
@@ -296,6 +479,102 @@ def list_jobs(request: Request):
                 )
             )
         return result
+
+
+@router.post("/jobs/{job_id}/checkpoint")
+def create_investigation_checkpoint(job_id: str, request: Request):
+    """Capture the baseline once when an investigator opens an editing session."""
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        _require_investigator_job(session, job_id, user_id)
+        active = session.scalar(
+            select(InvestigationCheckpoint)
+            .where(
+                InvestigationCheckpoint.job_id == job_id,
+                InvestigationCheckpoint.status == "active",
+            )
+            .order_by(InvestigationCheckpoint.created_at.desc())
+        )
+        if active:
+            if active.user_id != user_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Esta investigación ya tiene una sesión de edición activa en otro usuario.",
+                )
+            return {"job_id": job_id, "checkpoint_id": active.id, "status": active.status, "reused": True}
+
+        snapshot = _make_investigation_snapshot(session, job_id)
+        checkpoint = InvestigationCheckpoint(
+            job_id=job_id,
+            user_id=user_id,
+            status="active",
+            snapshot=snapshot,
+        )
+        session.add(checkpoint)
+        session.flush()
+        return {"job_id": job_id, "checkpoint_id": checkpoint.id, "status": checkpoint.status, "reused": False}
+
+
+@router.post("/jobs/{job_id}/checkpoint/commit")
+def commit_investigation_checkpoint(job_id: str, request: Request):
+    """Keep all session changes and close the restore point."""
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        _require_investigator_job(session, job_id, user_id)
+        checkpoint = session.scalar(
+            select(InvestigationCheckpoint)
+            .where(
+                InvestigationCheckpoint.job_id == job_id,
+                InvestigationCheckpoint.status == "active",
+            )
+            .order_by(InvestigationCheckpoint.created_at.desc())
+        )
+        if not checkpoint:
+            return {"job_id": job_id, "status": "no_active_checkpoint"}
+        if checkpoint.user_id != user_id:
+            raise HTTPException(status_code=409, detail="La sesión activa pertenece a otro usuario.")
+        checkpoint.status = "committed"
+        checkpoint.closed_at = datetime.now(timezone.utc)
+        return {"job_id": job_id, "checkpoint_id": checkpoint.id, "status": checkpoint.status}
+
+
+@router.post("/jobs/{job_id}/checkpoint/restore")
+def restore_investigation_checkpoint(job_id: str, request: Request):
+    """Revert all investigation-scoped database changes to the session baseline."""
+    user_id = request.state.current_user_id
+    with db_session() as session:
+        _require_investigator_job(session, job_id, user_id)
+        checkpoint = session.scalar(
+            select(InvestigationCheckpoint)
+            .where(
+                InvestigationCheckpoint.job_id == job_id,
+                InvestigationCheckpoint.status == "active",
+            )
+            .order_by(InvestigationCheckpoint.created_at.desc())
+        )
+        if not checkpoint:
+            raise HTTPException(status_code=409, detail="No hay un punto de restauración activo para esta sesión.")
+        if checkpoint.user_id != user_id:
+            raise HTTPException(status_code=409, detail="La sesión activa pertenece a otro usuario.")
+
+        checkpoint_id = checkpoint.id
+        snapshot = checkpoint.snapshot
+        checkpoint.status = "restoring"
+        session.commit()  # workers must observe the discard request before the restore starts
+        try:
+            _restore_investigation_snapshot(session, job_id, snapshot)
+            checkpoint = session.get(InvestigationCheckpoint, checkpoint_id)
+            checkpoint.status = "discarded"
+            checkpoint.closed_at = datetime.now(timezone.utc)
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            failed_checkpoint = session.get(InvestigationCheckpoint, checkpoint_id)
+            if failed_checkpoint:
+                failed_checkpoint.status = "active"
+                session.commit()
+            raise HTTPException(status_code=500, detail=f"No se pudo restaurar la investigación: {exc}") from exc
+        return {"job_id": job_id, "checkpoint_id": checkpoint_id, "status": "discarded", "restored": True}
 
 
 @router.get(
