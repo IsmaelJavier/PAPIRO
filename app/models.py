@@ -758,6 +758,8 @@ class InvestigationShare(Base):
     permission: Mapped[str] = mapped_column(String(16), nullable=False, default="read")
     base_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     id_map: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reviewed_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
