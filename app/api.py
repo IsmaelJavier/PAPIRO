@@ -979,7 +979,7 @@ def list_investigation_comments(share_id: str, request: Request):
 
 @router.post("/jobs/{job_id}/shares/{share_id}/merge")
 def merge_shared_investigation(job_id: str, share_id: str, request: Request):
-    """Pull a shared copy back only when the original has not changed since sharing."""
+    """Three-way merge a reviewed collaborator proposal without overwriting concurrent changes."""
     user_id = request.state.current_user_id
     with db_session() as session:
         original = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
