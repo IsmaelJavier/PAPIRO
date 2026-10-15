@@ -638,7 +638,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   const setExitProgress=message=>{const status=document.getElementById('exitProgress');if(status){status.textContent=message||'';status.hidden=!message;}};
   const closeSessionModal=()=>{if(!exitInProgress){setExitProgress('');sessionModal.style.display='none';}};
   const saveView=()=>{if(cy)savePositions();persistHidden();};
-  const rememberLocalBasisline=(checkpointId)=>{
+  const rememberLocalBaseline=(checkpointId)=>{
     let existing=null;
     try{existing=JSON.parse(localStorage.getItem(baselineKey)||'null');}catch{}
     if(existing?.checkpointId===checkpointId)return;
@@ -648,7 +648,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
       hidden:localStorage.getItem(hiddenKey)
     }));
   };
-  const restoreLocalBasisline=()=>{
+  const restoreLocalBaseline=()=>{
     let baseline=null;
     try{baseline=JSON.parse(localStorage.getItem(baselineKey)||'null');}catch{}
     if(baseline){
@@ -664,36 +664,36 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   };
   const leaveToWorkspace=async()=>{
     if(exitInProgress)return;exitInProgress=true;
-    if(readOnlySession||!checkpointReady){restoreLocalBasisline();location.href='/ui/workspace';return;}
+    if(readOnlySession||!checkpointReady){restoreLocalBaseline();location.href='/ui/workspace';return;}
     setExitProgress('Confirming saved changes…');
     try{await window.beginInvestigationEditingSession();saveView();await closeCheckpoint();location.href='/ui/workspace';}
     catch(e){exitInProgress=false;setExitProgress('');alert(`Could not confirm changes. The session is still open. ${e.message}`);}
   };
   const leaveWithoutSaving=async()=>{
     if(exitInProgress)return;exitInProgress=true;
-    if(readOnlySession||!checkpointReady){restoreLocalBasisline();location.href='/ui/workspace';return;}
+    if(readOnlySession||!checkpointReady){restoreLocalBaseline();location.href='/ui/workspace';return;}
     setExitProgress('Restoring the initial state… if a search is running, wait for it to finish.');
     try{
       await window.beginInvestigationEditingSession();
       await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
-      restoreLocalBasisline();
+      restoreLocalBaseline();
       location.href='/ui/workspace';
     }catch(e){exitInProgress=false;setExitProgress('');alert(`Could not discard the session. Do not leave the investigation until this error is resolved. ${e.message}`);}
   };
   const logoutAndClearView=async()=>{
     if(exitInProgress)return;exitInProgress=true;
-    if(readOnlySession||!checkpointReady){restoreLocalBasisline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
+    if(readOnlySession||!checkpointReady){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
     setExitProgress('Restoring the initial state before signing out…');
     try{
       await window.beginInvestigationEditingSession();
       await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint/restore`,{method:'POST'});
-      restoreLocalBasisline();
+      restoreLocalBaseline();
       localStorage.removeItem(TOKEN_KEY);location.replace('/ui');
     }catch(e){exitInProgress=false;setExitProgress('');alert(`Could not discard the session or sign out. ${e.message}`);}
   };
   const saveAndLogout=async()=>{
     if(exitInProgress)return;exitInProgress=true;
-    if(readOnlySession||!checkpointReady){restoreLocalBasisline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
+    if(readOnlySession||!checkpointReady){restoreLocalBaseline();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');return;}
     setExitProgress('Confirming changes before signing out…');
     try{await window.beginInvestigationEditingSession();saveView();await closeCheckpoint();localStorage.removeItem(TOKEN_KEY);location.replace('/ui');}
     catch(e){exitInProgress=false;setExitProgress('');alert(`Could not save changes. The session is still open. ${e.message}`);}
@@ -703,7 +703,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
     if(checkpointPromise)return checkpointPromise;
     checkpointPromise=(async()=>{
       const checkpoint=await api(`/jobs/${encodeURIComponent(jobId)}/checkpoint`,{method:'POST'});
-      rememberLocalBasisline(checkpoint.checkpoint_id);
+      rememberLocalBaseline(checkpoint.checkpoint_id);
       checkpointReady=true;
       return checkpoint;
     })().catch(error=>{checkpointPromise=null;throw error;});
