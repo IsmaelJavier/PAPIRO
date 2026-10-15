@@ -229,7 +229,7 @@ td, th { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--
 }
 .session-modal-backdrop, .modal-backdrop { background: var(--overlay) !important; }
 .session-modal, .modal {
-  width: min(480px, 100%);
+  width: min(480px, 100%) !important;
   border-radius: var(--radius-modal) !important;
   box-shadow: var(--shadow) !important;
 }
