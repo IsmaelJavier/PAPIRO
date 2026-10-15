@@ -123,3 +123,14 @@ def test_graph_resolves_papiro_tokens_for_cytoscape_canvas():
     assert "'text-outline-color':graphColors.surface" in response.text
     assert "'line-color':graphColors.border" in response.text
     assert "'label':'data(edge_type)'" in response.text
+
+def test_graph_uses_soft_node_colors_and_readable_label_backgrounds():
+    with TestClient(app) as client:
+        response = client.get("/ui/job/example-job")
+
+    assert response.status_code == 200
+    assert "accentPale:'#F8EBDD'" in response.text
+    assert "successPale:'#E7F2E9'" in response.text
+    assert "'text-background-color':graphColors.bg" in response.text
+    assert "'text-outline-width':2" not in response.text
+    assert "'background-color':graphColors.accentHover" not in response.text
