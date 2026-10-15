@@ -671,9 +671,9 @@ def test_investigation_workspace_exposes_review_before_merge_controls():
     with TestClient(app) as client:
         response = client.get("/ui/job/example")
     assert response.status_code == 200
-    assert "Revisar cambios" in response.text
-    assert "Marcar esta versión como revisada" in response.text
-    assert "Pendiente de revisión" in response.text
+    assert "Review changes" in response.text
+    assert "Mark this version as reviewed" in response.text
+    assert "Pending review" in response.text
 
 
 
