@@ -282,17 +282,17 @@ let selectedFindingIds = new Set(), selectedEntityIds = new Set(), selectedEleme
 let hiddenNodeIds = new Set(JSON.parse(localStorage.getItem(`kami:hidden:${jobId}`) || '[]'));
 const positionKey = `kami:positions:${jobId}`;
 let editingEntityId = null, editingRelationshipId = null;
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-const labelMap = { shared_username:'shared username', shared_email:'shared email', shared_phone:'teléfono compartido', shared_url:'URL compartida', shared_domain:'dominio compartido', shared_organization:'shared organization', shared_location:'shared location' };
-const identityText = { indeterminado:'Indeterminado', pertenece:'Pertenece', no_pertenece:'No pertenece' };
-const relevanceText = { indeterminado:'Undetermined', relevante:'Relevante', no_relevante:'No relevante' };
-const assessmentText = { indeterminado:'Undetermined', confirmada:'Confirmada', descartada:'Descartada' };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&var(--accent);'}[c]));
+const labelMap = { shared_username:'shared username', shared_email:'shared email', shared_phone:'shared phone number', shared_url:'URL compartida', shared_domain:'shared domain', shared_organization:'shared organization', shared_location:'shared location' };
+const identityText = { indeterminado:'Undetermined', pertenece:'Belongs', no_pertenece:'Does not belong' };
+const relevanceText = { indeterminado:'Undetermined', relevante:'Relevant', no_relevante:'Not relevant' };
+const assessmentText = { indeterminado:'Undetermined', confirmada:'Confirmed', descartada:'Rejected' };
 function closeModal(id){ document.getElementById(id).style.display='none'; }
 function openModal(id){ document.getElementById(id).style.display='flex'; }
 const TOKEN_KEY = 'kami:access-token';
 function updateAuthButton(){
   const btn = document.getElementById('authBtn');
-  if(btn) btn.textContent = localStorage.getItem(TOKEN_KEY) ? 'Cerrar sesión' : 'Iniciar sesión';
+  if(btn) btn.textContent = localStorage.getItem(TOKEN_KEY) ? 'Sign out' : 'Sign in';
 }
 async function api(path, options={}) {
   const token = localStorage.getItem(TOKEN_KEY);
@@ -340,7 +340,7 @@ function showAuthTab(tab){
   const login = tab === 'login';
   document.getElementById('loginForm').hidden = !login;
   document.getElementById('registerForm').hidden = login;
-  document.getElementById('authTitle').textContent = login ? 'Iniciar sesión' : 'Create account';
+  document.getElementById('authTitle').textContent = login ? 'Sign in' : 'Create account';
   document.getElementById('showLoginTab').classList.toggle('primary', login);
   document.getElementById('showRegisterTab').classList.toggle('primary', !login);
   document.getElementById('showLoginTab').setAttribute('aria-selected', String(login));
@@ -411,7 +411,7 @@ function toggleFinding(id, checked){ checked ? selectedFindingIds.add(id) : sele
 function updateSelectionUI(){
   const n=selectedFindingIds.size;
   document.getElementById('createEntityBtn').disabled=n===0;
-  document.getElementById('selectionHelp').textContent = n ? `${n} finding(s) seleccionado(s). Puedes crear una entidad candidata y asociar esta evidencia en un solo paso.` : 'Select one or more findings to build a candidate profile.';
+  document.getElementById('selectionHelp').textContent = n ? `${n} finding(s) selected. You can create a candidate entity and associate this evidence in one step.` : 'Select one or more findings to build a candidate profile.';
 }
 function selectVisible(){ document.querySelectorAll('#findingList .finding').forEach(el=>selectedFindingIds.add(el.dataset.finding)); renderFindings(); syncGraphSelection(); }
 function clearSelection(){ selectedFindingIds.clear(); selectedEntityIds.clear(); renderFindings(); renderEntities(); syncGraphSelection(); }
@@ -421,7 +421,7 @@ function renderEntities(){
   if(!entities.length){ list.innerHTML='<div class="empty">There are no candidate profiles yet. Select evidence to create the first one.</div>'; return; }
   list.innerHTML=entities.map(e=>`<div class="entity-card ${selectedEntityIds.has(e.id)?'selected':''}" data-entity="${esc(e.id)}">
     <div class="entity-name">${esc(e.label)}</div>
-    <div class="entity-meta">${e.findings.length} evidencia(s) asociada(s) · ${esc(e.entity_type)}</div>
+    <div class="entity-meta">${e.findings.length} associated finding(s) · ${esc(e.entity_type)}</div>
     <div class="entity-actions"><button class="btn small view-entity">View profile</button><button class="btn small edit-entity">Edit</button><button class="btn small relation-entity">Relationship</button></div>
   </div>`).join('');
   list.querySelectorAll('.entity-card').forEach(el=>{
@@ -448,9 +448,9 @@ function showFinding(id){
   const f=findingById(id); if(!f) return;
   setDetails(`<div class="detail-title">Finding</div><div class="detail-sub">${esc(f.source)} · ${esc(f.finding_type)}</div>
     <div class="detail-actions"><button class="btn small" onclick="hideNode('finding:${esc(f.id)}')">Ocultar del grafo</button><button class="btn small" onclick="focusNode('finding:${esc(f.id)}')">Centrar en grafo</button></div>
-    <div class="detail-actions"><button class="btn small" onclick="assessFinding('${esc(f.id)}','identity_assessment','pertenece')">Mark as belongs</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','identity_assessment','no_pertenece')">No pertenece</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','identity_assessment','indeterminado')">Indeterminado</button></div>
-    <div class="detail-actions"><button class="btn small" onclick="assessFinding('${esc(f.id)}','relevance_assessment','relevante')">Relevante</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','relevance_assessment','no_relevante')">No relevante</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','relevance_assessment','indeterminado')">Undetermined</button></div>
-    ${kv('Value',f.value)}${kv('Source',sourceLink(f.source_url),true)}${kv('Identidad',identityText[f.identity_assessment])}${kv('Relevancia',relevanceText[f.relevance_assessment])}${kv('Fuerza de evidencia',Number(f.evidence_strength).toFixed(2))}${kv('Razón de coincidencia',f.match_reason)}
+    <div class="detail-actions"><button class="btn small" onclick="assessFinding('${esc(f.id)}','identity_assessment','pertenece')">Mark as belongs</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','identity_assessment','no_pertenece')">Does not belong</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','identity_assessment','indeterminado')">Undetermined</button></div>
+    <div class="detail-actions"><button class="btn small" onclick="assessFinding('${esc(f.id)}','relevance_assessment','relevante')">Relevant</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','relevance_assessment','no_relevante')">Not relevant</button><button class="btn small" onclick="assessFinding('${esc(f.id)}','relevance_assessment','indeterminado')">Undetermined</button></div>
+    ${kv('Value',f.value)}${kv('Source',sourceLink(f.source_url),true)}${kv('Identity',identityText[f.identity_assessment])}${kv('Relevance',relevanceText[f.relevance_assessment])}${kv('Evidence strength',Number(f.evidence_strength).toFixed(2))}${kv('Match reason',f.match_reason)}
     <h3 style="margin-top:14px">Indicators</h3>${f.indicators?.map(i=>`<div class="kv"><b>${esc(i.indicator_type)}</b>${esc(i.value)} <span style="color:var(--muted)">(${esc(i.normalized_value)})</span></div>`).join('')||'<div class="empty">No indicators.</div>'}`);
 }
 function kv(k,v,raw=false){ return `<div class="kv"><b>${esc(k)}</b>${raw?v:esc(v??'—')}</div>`; }
@@ -463,23 +463,23 @@ async function showEntity(id, preserveSelection=false){
   try{
     const p=await api(`/entities/${encodeURIComponent(id)}/profile`);
     if(!preserveSelection){ selectedEntityIds=new Set([id]); renderEntities(); syncGraphSelection(); }
-    setDetails(`<div class="detail-title">${esc(p.label)}</div><div class="detail-sub">Perfil candidato · ${esc(p.entity_type)}</div>
-      <div class="detail-actions"><button class="btn primary small" onclick="toggleEntitySelection('${esc(id)}')">Select for relationship</button><button class="btn small" onclick="openEntityEdit('${esc(id)}')">Edit perfil</button><button class="btn small" onclick="hideNode('entity:${esc(id)}')">Ocultar del grafo</button><button class="btn small" onclick="focusNode('entity:${esc(id)}')">Centrar en grafo</button></div>
+    setDetails(`<div class="detail-title">${esc(p.label)}</div><div class="detail-sub">Candidate profile · ${esc(p.entity_type)}</div>
+      <div class="detail-actions"><button class="btn primary small" onclick="toggleEntitySelection('${esc(id)}')">Select for relationship</button><button class="btn small" onclick="openEntityEdit('${esc(id)}')">Edit profile</button><button class="btn small" onclick="hideNode('entity:${esc(id)}')">Ocultar del grafo</button><button class="btn small" onclick="focusNode('entity:${esc(id)}')">Centrar en grafo</button></div>
       ${kv('Description',p.description||'No description')}
-      <h3 style="margin-top:14px">Evidencia asociada (${p.findings.length})</h3>
+      <h3 style="margin-top:14px">Associated evidence (${p.findings.length})</h3>
       ${p.findings.map(f=>`<div class="finding" style="margin-bottom:7px"><div class="finding-main"><div class="finding-title">${esc(f.value)}</div><div class="finding-meta">${esc(f.source)} · ${esc(f.finding_type)}</div></div></div>`).join('')||'<div class="empty">No evidence.</div>'}
       <div class="detail-actions"><button class="btn small" onclick="attachSelectedFindingsToEntity('${esc(id)}')" ${selectedFindingIds.size?'':'disabled'}>Add selection as evidence</button></div>
       <h3 style="margin-top:14px">Indicators derivados (${p.indicators.length})</h3>
       ${p.indicators.map(i=>`<div class="kv"><b>${esc(i.indicator_type)}</b>${esc(i.value)}</div>`).join('')||'<div class="empty">No indicators.</div>'}
-      <h3 style="margin-top:14px">Relaciones (${p.relationships.length})</h3>
+      <h3 style="margin-top:14px">Relationships (${p.relationships.length})</h3>
       ${p.relationships.map(r=>`<div class="entity-card" style="margin-bottom:7px"><div class="entity-name">${esc(entityById(r.entity_a_id)?.label||r.entity_a_id)} ↔ ${esc(entityById(r.entity_b_id)?.label||r.entity_b_id)}</div><div class="entity-meta">${esc(r.relationship_type)} · ${esc(assessmentText[r.assessment]||r.assessment)}</div><button class="btn small" onclick="showRelationship('${esc(r.id)}')">View relationship</button></div>`).join('')||'<div class="empty">No relationships.</div>'}`);
   }catch(e){ alert(`Could not load the profile: ${e.message}`); }
 }
 function openEntityEdit(id){ const e=entityById(id); if(!e)return; editingEntityId=id; document.getElementById('editEntityLabel').value=e.label||''; document.getElementById('editEntityDescription').value=e.description||''; openModal('entityEditModal'); }
-async function saveEntityEdit(){ if(!editingEntityId)return; const label=document.getElementById('editEntityLabel').value.trim(); if(!label){alert('El nombre de trabajo no puede estar vacío.');return;} try{ await api(`/entities/${encodeURIComponent(editingEntityId)}`,{method:'PATCH',body:JSON.stringify({label,description:document.getElementById('editEntityDescription').value.trim()||null})}); const id=editingEntityId; closeModal('entityEditModal'); await loadAll(true); showEntity(id); }catch(e){alert(`Could not edit the entity: ${e.message}`);} }
+async function saveEntityEdit(){ if(!editingEntityId)return; const label=document.getElementById('editEntityLabel').value.trim(); if(!label){alert('The working name cannot be empty.');return;} try{ await api(`/entities/${encodeURIComponent(editingEntityId)}`,{method:'PATCH',body:JSON.stringify({label,description:document.getElementById('editEntityDescription').value.trim()||null})}); const id=editingEntityId; closeModal('entityEditModal'); await loadAll(true); showEntity(id); }catch(e){alert(`Could not edit the entity: ${e.message}`);} }
 async function attachSelectedFindingsToEntity(id){ if(!selectedFindingIds.size)return; try{ for(const findingId of selectedFindingIds){ await api(`/entities/${encodeURIComponent(id)}/findings`,{method:'POST',body:JSON.stringify({finding_id:findingId,role:'evidencia'})}); } await loadAll(true); showEntity(id); }catch(e){alert(`Could not associate evidence: ${e.message}`);} }
 function showRelationship(id){ const r=relationships.find(x=>x.id===id); if(!r)return; const a=entityById(r.entity_a_id), b=entityById(r.entity_b_id); setDetails(`<div class="detail-title">Relationship</div><div class="detail-sub">${esc(a?.label||r.entity_a_id)} ↔ ${esc(b?.label||r.entity_b_id)}</div>
-    <div class="detail-actions"><button class="btn small" onclick="openRelationshipEdit('${esc(r.id)}')">Edit relación</button><button class="btn success small" onclick="assessRelationship('${esc(r.id)}','confirmada')">Confirm</button><button class="btn danger small" onclick="assessRelationship('${esc(r.id)}','descartada')">Reject</button><button class="btn small" onclick="assessRelationship('${esc(r.id)}','indeterminado')">Undetermined</button></div>
+    <div class="detail-actions"><button class="btn small" onclick="openRelationshipEdit('${esc(r.id)}')">Edit relationship</button><button class="btn success small" onclick="assessRelationship('${esc(r.id)}','confirmada')">Confirm</button><button class="btn danger small" onclick="assessRelationship('${esc(r.id)}','descartada')">Reject</button><button class="btn small" onclick="assessRelationship('${esc(r.id)}','indeterminado')">Undetermined</button></div>
     ${kv('Type',r.relationship_type)}${kv('Assessment',assessmentText[r.assessment]||r.assessment)}${kv('Basis',r.basis)}${r.evidence?.length ? `<h3 style="margin-top:14px">Relationship evidence</h3>${r.evidence.map(e=>`<div class="kv"><b>Correlation</b>${esc(e.correlation_id||'')} · findings ${esc(e.finding_a_id||'')} / ${esc(e.finding_b_id||'')}</div>`).join('')}` : ''}`); }
 function openRelationshipEdit(id){ const r=relationships.find(x=>x.id===id); if(!r)return; editingRelationshipId=id; document.getElementById('editRelationshipType').value=r.relationship_type||''; document.getElementById('editRelationshipBasis').value=r.basis||''; openModal('relationshipEditModal'); }
 async function saveRelationshipEdit(){ if(!editingRelationshipId)return; const type=document.getElementById('editRelationshipType').value.trim(); const basis=document.getElementById('editRelationshipBasis').value.trim(); if(!type||!basis){alert('El tipo y la base son obligatorios.');return;} try{ await api(`/relationships/${encodeURIComponent(editingRelationshipId)}`,{method:'PATCH',body:JSON.stringify({relationship_type:type,basis})}); const id=editingRelationshipId; closeModal('relationshipEditModal'); await loadAll(true); showRelationship(id); }catch(e){alert(`Could not edit the relationship: ${e.message}`);} }
@@ -520,7 +520,7 @@ function openRelationshipModal(){
 }
 async function saveRelationship(){
   const [a,b]=[...selectedEntityIds]; const corr=document.getElementById('relationshipCorrelation').value||null;
-  const basis=document.getElementById('relationshipBasis').value.trim(); if(!basis){alert('Describe la base observable de la relación.');return;}
+  const basis=document.getElementById('relationshipBasis').value.trim(); if(!basis){alert('Describe the observable basis for the relationship.');return;}
   const c=corr?correlationById(corr):null;
   try{ await api(`/jobs/${encodeURIComponent(jobId)}/relationships`,{method:'POST',body:JSON.stringify({entity_a_id:a,entity_b_id:b,relationship_type:document.getElementById('relationshipType').value,basis,assessment:'indeterminado',correlation_id:corr,finding_a_id:c?.finding_a_id||null,finding_b_id:c?.finding_b_id||null})}); closeModal('relationshipModal'); await loadAll(); }
   catch(e){ alert(`Could not create the relationship: ${e.message}`); }
@@ -539,18 +539,18 @@ function buildGraph(preserve=true){
   const stored=readPositions(); if(cy){savePositions();cy.destroy();}
   const allKnown=nodes.length>0&&nodes.every(n=>stored[n.data.id]);
   cy=cytoscape({container:document.getElementById('cy'),elements:{nodes,edges},style:[
-    {selector:'node',style:{'label':'data(label)','font-size':10,'color':'#263247','text-wrap':'wrap','text-max-width':145,'background-color':'#9aa8bd','width':34,'height':34,'border-width':1,'border-color':'#718096','text-valign':'bottom','text-margin-y':7}},
-    {selector:'node[node_type="finding"]',style:{'shape':'roundrectangle','background-color':'#475569','color':'#1f2937','width':54,'height':38,'font-size':9}},
-    {selector:'node[node_type="indicator"]',style:{'shape':'ellipse','background-color':'#2d62d9','width':27,'height':27,'color':'#24324a','font-size':8}},
-    {selector:'node[node_type="entity"]',style:{'shape':'hexagon','background-color':'#15926a','width':58,'height':58,'font-size':11,'font-weight':700}},
-    {selector:'node[assessment="pertenece"]',style:{'border-color':'#16845b'}},
+    {selector:'node',style:{'label':'data(label)','font-size':10,'color':'var(--accent-soft)','text-wrap':'wrap','text-max-width':145,'background-color':'var(--text-muted)','width':34,'height':34,'border-width':1,'border-color':'var(--text-muted)','text-valign':'bottom','text-margin-y':7}},
+    {selector:'node[node_type="finding"]',style:{'shape':'roundrectangle','background-color':'var(--text-muted)','color':'var(--text)','width':54,'height':38,'font-size':9}},
+    {selector:'node[node_type="indicator"]',style:{'shape':'ellipse','background-color':'var(--accent-hover)','width':27,'height':27,'color':'var(--surface-subtle)','font-size':8}},
+    {selector:'node[node_type="entity"]',style:{'shape':'hexagon','background-color':'var(--success)','width':58,'height':58,'font-size':11,'font-weight':700}},
+    {selector:'node[assessment="pertenece"]',style:{'border-color':'var(--success)'}},
     {selector:'node[assessment="no_pertenece"]',style:{'opacity':0.45,'border-style':'dashed'}},
     {selector:'node[relevance="no_relevante"]',style:{'opacity':0.35}},
-    {selector:'edge',style:{'width':1.4,'line-color':'#a6b1c1','target-arrow-color':'#8b98aa','target-arrow-shape':'triangle','curve-style':'bezier','label':'data(edge_type)','font-size':8,'color':'#5e6b7d','text-background-opacity':1,'text-background-color':'#fbfcfe','text-background-padding':2}},
-    {selector:'edge[edge_type="correlation"]',style:{'line-style':'dashed','line-color':'#b7791f','target-arrow-color':'#b7791f'}},
-    {selector:'edge[edge_type="relationship"]',style:{'width':3,'line-color':'#15926a','target-arrow-color':'#15926a','label':'data(relationship_type)'}},
-    {selector:'.investigator-selected',style:{'border-width':4,'border-color':'#2457d6','background-color':'#e6edff'}},
-    {selector:':selected',style:{'border-width':3,'border-color':'#101827','line-color':'#101827','target-arrow-color':'#101827'}}
+    {selector:'edge',style:{'width':1.4,'line-color':'var(--text-muted)','target-arrow-color':'var(--text-muted)','target-arrow-shape':'triangle','curve-style':'bezier','label':'data(edge_type)','font-size':8,'color':'var(--text-muted)','text-background-opacity':1,'text-background-color':'var(--bg)','text-background-padding':2}},
+    {selector:'edge[edge_type="correlation"]',style:{'line-style':'dashed','line-color':'var(--warning)','target-arrow-color':'var(--warning)'}},
+    {selector:'edge[edge_type="relationship"]',style:{'width':3,'line-color':'var(--success)','target-arrow-color':'var(--success)','label':'data(relationship_type)'}},
+    {selector:'.investigator-selected',style:{'border-width':4,'border-color':'var(--accent)','background-color':'var(--accent-soft)'}},
+    {selector:':selected',style:{'border-width':3,'border-color':'var(--surface)','line-color':'var(--surface)','target-arrow-color':'var(--surface)'}}
   ],layout:allKnown&&preserve?{name:'preset',positions:n=>stored[n.id()],fit:false}:{name:'cose',animate:false,padding:60,nodeRepulsion:8000,idealEdgeLength:130}});
   cy.on('dragfree','node',savePositions);
   cy.on('tap','node',e=>{selectedElement=e.target.data();const d=selectedElement;if(d.node_type==='finding')showFinding(d.id.replace('finding:',''));else if(d.node_type==='entity'){const id=d.id.replace('entity:','');showEntity(id,true);toggleEntitySelection(id);}else setDetails(`<div class="detail-title">Indicador</div><div class="detail-sub">${esc(d.indicator_type||'')}</div>${kv('Value',d.label)}${kv('Normalized',d.normalized_value)}${kv('Source',d.source||'')}`);});
