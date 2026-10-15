@@ -1,0 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --border-hover: #C9C5BC;
+  --bg: #FAFAF8;
+  --surface: #FFFFFF;
+  --border: #E7E5E0;
+  --text: #1C1B19;
+  --text-muted: #6B6962;
+  --accent: #B45309;
+  --accent-hover: #92400E;
+  --danger: #B91C1C;
+  --success: #15803D;
+  --font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 8px;
+  --shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 16px; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 16px; line-height: 1.6; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea { transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease; }
+:where(a, button, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+header { min-height: 64px !important; height: auto; background: var(--surface) !important; color: var(--text) !important; border-bottom: 1px solid var(--border); padding: 12px max(16px, calc((100vw - 1120px)/2)) !important; position: sticky; top: 0; z-index: 20; }
+header strong, header h1, header .brand { color: var(--text) !important; font-family: var(--font); font-size: 16px !important; font-weight: 600; letter-spacing: .12em !important; text-transform: uppercase; }
+header span, header .sub { color: var(--text-muted) !important; }
+main { max-width: 1120px; }
+h1, h2, h3, h4 { color: var(--text); line-height: 1.25; font-weight: 600; }
+p { color: var(--text-muted); line-height: 1.6; }
+.card, .panel, .modal, .job-card, .workspace-card, .result-card { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: var(--radius) !important; box-shadow: var(--shadow) !important; }
+button, .button, input, select, textarea { min-height: 40px; border-radius: var(--radius); }
+button { padding: 8px 16px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 500; }
+button:hover { border-color: var(--text-muted); }
+button.primary, button[type="submit"], .primary, .btn-primary { background: var(--accent) !important; border-color: var(--accent) !important; color: #FFFFFF !important; }
+button.primary:hover, button[type="submit"]:hover, .primary:hover, .btn-primary:hover { background: var(--accent-hover) !important; border-color: var(--accent-hover) !important; }
+input, select, textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+label { display: block; color: var(--text-muted); font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.error, [role="alert"] { color: var(--danger) !important; font-size: 12px; }
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+table { border-collapse: collapse; }
+th { color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+td, th { border-bottom: 1px solid var(--border); }
+.badge, .status, .pill { border-radius: 999px; }
+.footer, footer { color: var(--text-muted); border-top: 1px solid var(--border); }
+.eyebrow { color: var(--accent) !important; font-weight: 600; }
+.notice { background: var(--bg) !important; border-color: var(--border) !important; color: var(--text-muted) !important; }
+.empty-state { border-color: var(--border) !important; color: var(--text-muted) !important; }
+@media (max-width: 767px) {
+  header { padding: 10px 16px !important; }
+  main { width: 100%; padding: 24px 16px !important; grid-template-columns: 1fr !important; gap: 24px !important; }
+  button, a, input, select, textarea { scroll-margin-top: 72px; }
+}
+
+/* Final component overrides: keep every route on the same quiet visual system. */
+header .brand { font-family: var(--font) !important; font-size: 16px !important; font-weight: 600 !important; letter-spacing: .12em !important; text-transform: uppercase; color: var(--text) !important; }
+header .header-actions a, header .header-actions button { background: var(--surface) !important; border: 1px solid var(--border) !important; color: var(--text) !important; border-radius: 8px !important; }
+header .header-actions a:hover, header .header-actions button:hover { border-color: var(--text-muted) !important; }
+header #saveStatus { color: var(--text-muted) !important; }
+.app { background: var(--bg) !important; }
+.layout, .sidebar, .workspace-shell, .workspace-main { background: var(--bg) !important; }
+.sidebar { border-right: 1px solid var(--border) !important; }
+.sidebar a, .sidebar button { color: var(--text-muted); }
+.sidebar a[aria-current="page"], .sidebar a.active { background: #B4530914 !important; color: var(--accent) !important; }
+.session-modal-backdrop, .modal-backdrop { background: rgba(28,27,25,.4) !important; }
+.session-modal, .modal { border-radius: 12px !important; box-shadow: var(--shadow) !important; }
+.btn.danger-fill { background: var(--danger) !important; border-color: var(--danger) !important; }
+:where(.badge,.status,.pill) { padding: 2px 8px; font-size: 12px; border-radius: 999px; }
+:where(.job-card,.panel-card,.card):hover { border-color: var(--border-hover) !important; }
+:where(.sidebar a,.sidebar button,.workspace-actions button) { min-height: 44px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; scroll-behavior: auto !important; } }
+
+:root {
+  --bg: #FAFAF8 !important;
+  --surface: #FFFFFF !important;
+  --border: #E7E5E0 !important;
+  --text: #1C1B19 !important;
+  --text-muted: #6B6962 !important;
+  --accent: #B45309 !important;
+  --accent-hover: #92400E !important;
+  --danger: #B91C1C !important;
+  --success: #15803D !important;
+  --panel: #FFFFFF !important;
+  --line: #E7E5E0 !important;
+  --ink: #1C1B19 !important;
+  --muted: #6B6962 !important;
+  --primary: #B45309 !important;
+  --primary-soft: #B4530914 !important;
+  --dark: #FFFFFF !important;
+}
+
+:root {
+  --accent-soft: #B4530914;
+  --success-soft: #15803D14;
+  --danger-soft: #B91C1C14;
+  --warning: #92400E;
+  --warning-soft: #92400E14;
+  --surface-subtle: #F5F4F0;
+  --overlay: rgba(28,27,25,.4);
+}
+
+.sidebar { background: var(--surface) !important; color: var(--text) !important; border-right: 1px solid var(--border) !important; }
+.sidebar a:hover, .sidebar button:hover { background: var(--accent-soft) !important; color: var(--accent) !important; }
+.mobile-menu-toggle { display: none; }
+@media (max-width: 767px) {
+  button, a, input, select, textarea { min-height: 44px; }
+  header { flex-direction: row !important; align-items: center !important; justify-content: space-between; gap: 12px; }
+  .mobile-menu-toggle { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; }
+  .workspace-shell { display: block !important; }
+  .sidebar { display: none !important; }
+  .sidebar.is-open { display: flex !important; flex-direction: column; width: 100%; border-right: 0 !important; border-bottom: 1px solid var(--border); }
+  .sidebar.is-open h2 { display: block !important; }
+  .sidebar.is-open a, .sidebar.is-open button { width: 100%; text-align: left; }
+}
+
+h1 { font-size: clamp(24px, 3vw, 32px) !important; line-height: 1.25 !important; letter-spacing: -.4px !important; }
+.panel-card, .stat-card { border-radius: 8px !important; box-shadow: none !important; }
+.job-card, .card, .panel, .result-card { box-shadow: none !important; }
+@media (max-width: 767px) { .workspace-main { padding: 24px 16px !important; } }
