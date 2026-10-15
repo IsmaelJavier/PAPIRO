@@ -538,20 +538,35 @@ function buildGraph(preserve=true){
   const nodes=(graphData.nodes||[]).map(n=>({data:n})), edges=(graphData.edges||[]).map(e=>({data:e}));
   const stored=readPositions(); if(cy){savePositions();cy.destroy();}
   const allKnown=nodes.length>0&&nodes.every(n=>stored[n.data.id]);
+  // Cytoscape does not resolve CSS custom properties in its canvas styles.
+  // Resolve the shared PAPIRO tokens to concrete colors before building the graph.
+  const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const graphColors={
+    text:token('--text')||'#1C1B19',
+    muted:token('--text-muted')||'#6B6962',
+    surface:token('--surface')||'#FFFFFF',
+    bg:token('--bg')||'#FAFAF8',
+    border:token('--border')||'#E7E5E0',
+    accent:token('--accent')||'#B45309',
+    accentSoft:token('--accent-soft')||'rgba(180,83,9,0.08)',
+    accentHover:token('--accent-hover')||'#92400E',
+    success:token('--success')||'#15803D',
+    warning:token('--warning')||'#92400E'
+  };
   cy=cytoscape({container:document.getElementById('cy'),elements:{nodes,edges},style:[
-    {selector:'node',style:{'label':'data(label)','font-size':10,'color':'var(--accent-soft)','text-wrap':'wrap','text-max-width':145,'background-color':'var(--text-muted)','width':34,'height':34,'border-width':1,'border-color':'var(--text-muted)','text-valign':'bottom','text-margin-y':7}},
-    {selector:'node[node_type="finding"]',style:{'shape':'roundrectangle','background-color':'var(--text-muted)','color':'var(--text)','width':54,'height':38,'font-size':9}},
-    {selector:'node[node_type="indicator"]',style:{'shape':'ellipse','background-color':'var(--accent-hover)','width':27,'height':27,'color':'var(--surface-subtle)','font-size':8}},
-    {selector:'node[node_type="entity"]',style:{'shape':'hexagon','background-color':'var(--success)','width':58,'height':58,'font-size':11,'font-weight':700}},
-    {selector:'node[assessment="pertenece"]',style:{'border-color':'var(--success)'}},
-    {selector:'node[assessment="no_pertenece"]',style:{'opacity':0.45,'border-style':'dashed'}},
-    {selector:'node[relevance="no_relevante"]',style:{'opacity':0.35}},
-    {selector:'edge',style:{'width':1.4,'line-color':'var(--text-muted)','target-arrow-color':'var(--text-muted)','target-arrow-shape':'triangle','curve-style':'bezier','label':'data(edge_type)','font-size':8,'color':'var(--text-muted)','text-background-opacity':1,'text-background-color':'var(--bg)','text-background-padding':2}},
-    {selector:'edge[edge_type="correlation"]',style:{'line-style':'dashed','line-color':'var(--warning)','target-arrow-color':'var(--warning)'}},
-    {selector:'edge[edge_type="relationship"]',style:{'width':3,'line-color':'var(--success)','target-arrow-color':'var(--success)','label':'data(relationship_type)'}},
-    {selector:'.investigator-selected',style:{'border-width':4,'border-color':'var(--accent)','background-color':'var(--accent-soft)'}},
-    {selector:':selected',style:{'border-width':3,'border-color':'var(--surface)','line-color':'var(--surface)','target-arrow-color':'var(--surface)'}}
-  ],layout:allKnown&&preserve?{name:'preset',positions:n=>stored[n.id()],fit:false}:{name:'cose',animate:false,padding:60,nodeRepulsion:8000,idealEdgeLength:130}});
+    {selector:'node',style:{'label':'data(label)','font-size':11,'font-family':'Inter, system-ui, sans-serif','color':graphColors.text,'text-wrap':'wrap','text-max-width':160,'text-outline-width':2,'text-outline-color':graphColors.surface,'text-outline-opacity':1,'background-color':graphColors.muted,'width':36,'height':36,'border-width':1.5,'border-color':graphColors.muted,'text-valign':'bottom','text-halign':'center','text-margin-y':8}},
+    {selector:'node[node_type="finding"]',style:{'shape':'roundrectangle','background-color':graphColors.surface,'border-color':graphColors.muted,'color':graphColors.text,'width':58,'height':42,'font-size':10}},
+    {selector:'node[node_type="indicator"]',style:{'shape':'ellipse','background-color':graphColors.accentHover,'border-color':graphColors.accentHover,'width':30,'height':30,'color':graphColors.text,'font-size':10}},
+    {selector:'node[node_type="entity"]',style:{'shape':'hexagon','background-color':graphColors.success,'border-color':graphColors.success,'color':graphColors.surface,'width':62,'height':62,'font-size':11,'font-weight':600}},
+    {selector:'node[assessment="pertenece"]',style:{'border-color':graphColors.success,'border-width':3}},
+    {selector:'node[assessment="no_pertenece"]',style:{'opacity':0.55,'border-style':'dashed'}},
+    {selector:'node[relevance="no_relevante"]',style:{'opacity':0.45}},
+    {selector:'edge',style:{'width':1.5,'line-color':graphColors.border,'target-arrow-color':graphColors.muted,'target-arrow-shape':'triangle','curve-style':'bezier','label':'','font-size':10,'font-family':'Inter, system-ui, sans-serif','color':graphColors.text,'text-outline-width':2,'text-outline-color':graphColors.surface,'text-outline-opacity':1}},
+    {selector:'edge[edge_type="correlation"]',style:{'line-style':'dashed','line-color':graphColors.warning,'target-arrow-color':graphColors.warning,'label':'data(edge_type)','font-size':9}},
+    {selector:'edge[edge_type="relationship"]',style:{'width':2.5,'line-color':graphColors.success,'target-arrow-color':graphColors.success,'label':'data(relationship_type)','font-size':10}},
+    {selector:'.investigator-selected',style:{'border-width':3,'border-color':graphColors.accent,'background-color':graphColors.accentSoft}},
+    {selector:':selected',style:{'border-width':3,'border-color':graphColors.accent,'line-color':graphColors.accent,'target-arrow-color':graphColors.accent}}
+  ],layout:allKnown&&preserve?{name:'preset',positions:n=>stored[n.id()],fit:false}:{name:'cose',animate:false,padding:80,nodeRepulsion:12000,idealEdgeLength:150}});
   cy.on('dragfree','node',savePositions);
   cy.on('tap','node',e=>{selectedElement=e.target.data();const d=selectedElement;if(d.node_type==='finding')showFinding(d.id.replace('finding:',''));else if(d.node_type==='entity'){const id=d.id.replace('entity:','');showEntity(id,true);toggleEntitySelection(id);}else setDetails(`<div class="detail-title">Indicador</div><div class="detail-sub">${esc(d.indicator_type||'')}</div>${kv('Value',d.label)}${kv('Normalized',d.normalized_value)}${kv('Source',d.source||'')}`);});
   cy.on('tap','edge',e=>{const d=e.target.data();if(d.edge_type==='correlation')showCorrelation(d.correlation_id);else if(d.edge_type==='relationship')showRelationship(d.relationship_id);else setDetails(`<div class="detail-title">Evidence ↔ indicator</div>${kv('Evidence basis',d.basis||'')}`);});
