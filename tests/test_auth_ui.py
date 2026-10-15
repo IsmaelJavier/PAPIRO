@@ -65,3 +65,50 @@ def test_papiro_brand_assets_are_served():
     assert "--accent: #B45309" in css.text
     assert image.status_code == 200
     assert 'aria-label="PAPIRO"' in image.text
+
+def test_all_ui_routes_use_papiro_brand_and_english_copy():
+    with TestClient(app) as client:
+        pages = [
+            client.get("/ui"),
+            client.get("/ui/workspace"),
+            client.get("/ui/job/example-job"),
+        ]
+
+    for response in pages:
+        assert response.status_code == 200
+        assert '<html lang="en-US">' in response.text
+        assert 'property="og:title" content="PAPIRO"' in response.text
+        assert 'aria-label="PAPIRO"' in response.text
+        assert "Kami-no-Eye" not in response.text
+        assert "Kami no Eye" not in response.text
+        assert "Investigación:" not in response.text
+        assert "Acceso de solo lectura" not in response.text
+
+    graph = pages[2].text
+    assert "Investigation:" in graph
+    assert "Searching configured sources…" in graph
+    assert "Relationship type and basis are required." in graph
+    assert "Read-only access" in graph
+
+
+def test_papiro_styles_include_accessible_shared_tokens():
+    with TestClient(app) as client:
+        response = client.get("/ui/papiro.css")
+
+    assert response.status_code == 200
+    for token in (
+        "--bg: #FAFAF8",
+        "--surface: #FFFFFF",
+        "--border: #E7E5E0",
+        "--text: #1C1B19",
+        "--text-muted: #6B6962",
+        "--accent: #B45309",
+        "--accent-hover: #92400E",
+        "--danger: #B91C1C",
+        "--success: #15803D",
+        "letter-spacing: 0.12em",
+        "outline: 2px solid var(--accent)",
+        "prefers-reduced-motion: reduce",
+    ):
+        assert token in response.text
+    assert "linear-gradient(" not in response.text
