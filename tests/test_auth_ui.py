@@ -112,3 +112,14 @@ def test_papiro_styles_include_accessible_shared_tokens():
     ):
         assert token in response.text
     assert "linear-gradient(" not in response.text
+
+def test_graph_resolves_papiro_tokens_for_cytoscape_canvas():
+    with TestClient(app) as client:
+        response = client.get("/ui/job/example-job")
+
+    assert response.status_code == 200
+    assert "getComputedStyle(document.documentElement)" in response.text
+    assert "const graphColors=" in response.text
+    assert "'text-outline-color':graphColors.surface" in response.text
+    assert "'line-color':graphColors.border" in response.text
+    assert "'label':'data(edge_type)'" in response.text
