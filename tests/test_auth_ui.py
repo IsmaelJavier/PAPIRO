@@ -14,7 +14,7 @@ def test_ui_landing_is_only_for_login_and_registration():
         assert '<strong class="brand">PAPIRO</strong>' in response.text
         assert "registerForm" in response.text
         assert "/auth/register" in response.text
-        assert "location.replace('/ui/workspace')" in response.text
+        assert "location.replace('/ui/workspace')" in client.get("/ui/assets/index.js").text
         assert 'id="investigationList"' not in response.text
 
 
@@ -30,7 +30,7 @@ def test_workspace_has_own_dashboard_and_optional_investigation_creation():
         assert 'id="logoutModal"' in response.text
         assert 'id="investigationName"' in response.text
         assert 'id="investigationNotes"' in response.text
-        assert "request('/investigations'" in response.text
+        assert "request('/investigations'" in client.get("/ui/assets/workspace.js").text
         assert "request('/ingest/name'" not in response.text
 
 
@@ -49,13 +49,14 @@ def test_investigation_ui_has_autosave_exit_and_logout_confirmation():
         assert 'id="cancelSessionExit"' in response.text
         assert 'id="leaveWithoutSaving"' in response.text
         assert 'id="saveAndLeave"' in response.text
-        assert "DOMContentLoaded" in response.text
-        assert "Autosave is on" in response.text
-        assert "/checkpoint" in response.text
-        assert "/checkpoint/restore" in response.text
-        assert "/checkpoint/commit" in response.text
-        assert "Save and exit" in response.text
-        assert "rememberLocalBaseline" in response.text
+        script = client.get("/ui/assets/graph.js").text
+        assert "DOMContentLoaded" in script
+        assert "Autosave is on" in script
+        assert "/checkpoint" in script
+        assert "/checkpoint/restore" in script
+        assert "/checkpoint/commit" in script
+        assert "Save and exit" in script
+        assert "rememberLocalBaseline" in script
 
 
 def test_papiro_brand_assets_are_served():
@@ -199,3 +200,18 @@ def test_graph_uses_soft_node_colors_and_readable_label_backgrounds():
     assert "'text-background-color':graphColors.bg" in response.text
     assert "'text-outline-width':2" not in response.text
     assert "'background-color':graphColors.accentHover" not in response.text
+
+
+def test_page_assets_are_served_separately():
+    with TestClient(app) as client:
+        for page in ("index", "workspace", "graph"):
+            html = client.get("/ui" if page == "index" else ("/ui/workspace" if page == "workspace" else "/ui/job/example-job"))
+            css = client.get(f"/ui/assets/{page}.css")
+            js = client.get(f"/ui/assets/{page}.js")
+            assert html.status_code == 200
+            assert f"/ui/assets/{page}.css" in html.text
+            assert f"/ui/assets/{page}.js" in html.text
+            assert css.status_code == 200
+            assert js.status_code == 200
+            assert "<style" not in html.text.lower()
+            assert "<script>" not in html.text.lower()
