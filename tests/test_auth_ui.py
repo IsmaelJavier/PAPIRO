@@ -167,6 +167,7 @@ def test_graph_scroll_zoom_and_responsive_layout_are_separated():
     assert "edit-entity" not in response.text
     assert "relation-entity" not in response.text
     assert "showEntity(id,true);toggleEntitySelection(id);" not in response.text
+    assert "selectedEntityIds=new Set([id])" not in response.text
     assert "Select for relationship" in response.text
 
     # Existing graph actions and filters must remain available.
