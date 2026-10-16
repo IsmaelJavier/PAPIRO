@@ -124,6 +124,42 @@ def test_graph_resolves_papiro_tokens_for_cytoscape_canvas():
     assert "'line-color':graphColors.border" in response.text
     assert "'label':'data(edge_type)'" in response.text
 
+
+def test_graph_scroll_zoom_and_responsive_layout_are_separated():
+    with TestClient(app) as client:
+        response = client.get("/ui/job/example-job")
+
+    assert response.status_code == 200
+    for fragment in (
+        "height:100dvh",
+        "grid-template-rows:64px minmax(0,1fr)",
+        "overscroll-behavior:contain",
+        "userZoomingEnabled:false",
+        'id="zoomOutBtn"',
+        'aria-label="Zoom out"',
+        'id="zoomInBtn"',
+        'aria-label="Zoom in"',
+        "function zoomGraphBy(factor)",
+        "cy.zoom({level,renderedPosition:{x:cy.width()/2,y:cy.height()/2}})",
+        "height:auto; min-height:100vh; min-height:100dvh; overflow:visible",
+        "grid-template-rows:auto minmax(55vh,65dvh) auto",
+    ):
+        assert fragment in response.text
+
+    # Existing graph actions and filters must remain available.
+    for element_id in (
+        "fitBtn",
+        "resetGraphBtn",
+        "hideSelectedBtn",
+        "showHiddenBtn",
+        "nodeTypeFilter",
+        "showIndicators",
+        "showCorrelations",
+        "showMemberships",
+    ):
+        assert f'id="{element_id}"' in response.text
+
+
 def test_graph_uses_soft_node_colors_and_readable_label_backgrounds():
     with TestClient(app) as client:
         response = client.get("/ui/job/example-job")
