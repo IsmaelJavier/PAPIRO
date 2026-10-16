@@ -2,8 +2,17 @@ const jobId = location.pathname.split('/').filter(Boolean).pop();
 const API = `/api/v1`;
 let graphData = null, cy = null, findings = [], entities = [], correlations = [], relationships = [];
 let selectedFindingIds = new Set(), selectedEntityIds = new Set(), selectedElement = null;
-let hiddenNodeIds = new Set(JSON.parse(localStorage.getItem(`kami:hidden:${jobId}`) || '[]'));
-const positionKey = `kami:positions:${jobId}`;
+function readMigratedStorage(key, legacyKey) {
+  let value = localStorage.getItem(key);
+  if (value === null) {
+    value = localStorage.getItem(legacyKey);
+    if (value !== null) localStorage.setItem(key, value);
+  }
+  if (value !== null) localStorage.removeItem(legacyKey);
+  return value;
+}
+let hiddenNodeIds = new Set(JSON.parse(readMigratedStorage(`papiro:hidden:${jobId}`, `kami:hidden:${jobId}`) || '[]'));
+const positionKey = `papiro:positions:${jobId}`;
 let editingEntityId = null, editingRelationshipId = null;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const labelMap = { shared_username:'shared username', shared_email:'shared email', shared_phone:'shared phone number', shared_url:'URL compartida', shared_domain:'shared domain', shared_organization:'shared organization', shared_location:'shared location' };
@@ -12,7 +21,9 @@ const relevanceText = { indeterminado:'Undetermined', relevante:'Relevant', no_r
 const assessmentText = { indeterminado:'Undetermined', confirmada:'Confirmed', descartada:'Rejected' };
 function closeModal(id){ document.getElementById(id).style.display='none'; }
 function openModal(id){ document.getElementById(id).style.display='flex'; }
-const TOKEN_KEY = 'kami:access-token';
+const TOKEN_KEY = 'papiro:access-token';
+const LEGACY_TOKEN_KEY = 'kami:access-token';
+readMigratedStorage(TOKEN_KEY, LEGACY_TOKEN_KEY);
 function updateAuthButton(){
   const btn = document.getElementById('authBtn');
   if(btn) btn.textContent = localStorage.getItem(TOKEN_KEY) ? 'Sign out' : 'Sign in';
