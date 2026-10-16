@@ -41,7 +41,8 @@ def test_investigation_ui_has_autosave_exit_and_logout_confirmation():
         assert "<title>PAPIRO · Investigation workspace</title>" in response.text
         assert 'property="og:title" content="PAPIRO"' in response.text
         assert 'id="saveStatus"' in response.text
-        assert 'id="saveExitBtn"' in response.text
+        assert 'id="saveExitBtn"' not in response.text
+        assert 'id="workspaceLink"' in response.text
         assert 'id="sessionModal"' in response.text
         assert 'id="saveAndLogout"' in response.text
         assert 'id="logoutWithoutViewSave"' in response.text
@@ -135,7 +136,9 @@ def test_graph_scroll_zoom_and_responsive_layout_are_separated():
         "height:100dvh",
         "grid-template-rows:64px minmax(0,1fr)",
         "overscroll-behavior:contain",
-        "userZoomingEnabled:false",
+        "userZoomingEnabled:true",
+        "addEventListener('wheel',event=>{if(!event.ctrlKey)event.stopImmediatePropagation();},{capture:true})",
+        "Reset filters &amp; view",
         'id="zoomOutBtn"',
         'aria-label="Zoom out"',
         'id="zoomInBtn"',
@@ -157,6 +160,8 @@ def test_graph_scroll_zoom_and_responsive_layout_are_separated():
         "showIndicators",
         "showCorrelations",
         "showMemberships",
+        "zoomInBtn",
+        "zoomOutBtn",
     ):
         assert f'id="{element_id}"' in response.text
 
