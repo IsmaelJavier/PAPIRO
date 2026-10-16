@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
 from app.api import router
@@ -85,3 +86,10 @@ def papiro_social_image():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+app.mount(
+    "/ui/assets",
+    StaticFiles(directory=Path(__file__).resolve().parent / "static"),
+    name="ui-assets",
+)
