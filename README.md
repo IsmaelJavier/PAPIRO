@@ -60,26 +60,8 @@ La configuración actual utiliza `network_mode: host`; en algunos sistemas o con
 2. Inicia sesión y crea una investigación.
 3. Ejecuta manualmente una búsqueda por nombre.
 4. Revisa los hallazgos, sus fuentes, los indicadores y las correlaciones.
-5. Si resulta útil, organiza los hallazgos en perfiles candidatos y explora las relaciones del grafo.
+5. Si resulta útil, organiza los hallazgos en perfiles candidatos y explora las relaciones del grafo. (requiere mejor UI/UX)
 
-Para crear una cuenta de superusuario, ejecuta el comando **antes de registrar cualquier otra cuenta**:
+usuario investigador: puede realizar investigaciones tanto privadas como para una entidad a la que pertenezca
+usuario entidad: puede administrar varios investigadores.
 
-```bash
-docker compose exec -it api python -m scripts.bootstrap_superuser
-```
-
-El script solicita el correo y la contraseña dos veces y exige una contraseña de al menos 12 caracteres. Solo funciona si todavía no existe ninguna cuenta.
-
-## Pruebas
-
-```bash
-docker compose run --rm api pytest -q
-```
-
-Ejecuta las pruebas en tu entorno; no se garantiza que todas pasen en cada versión.
-
-## Uso responsable
-
-Investiga únicamente con una base legal y respeta la privacidad y las condiciones de las fuentes. Conserva la procedencia de la información y verifica los resultados: una coincidencia, un perfil candidato o una relación del grafo no constituyen por sí solos una identificación confirmada.
-
-Si utilizas una base de datos existente de una versión anterior, haz una copia de seguridad y revisa el esquema y las instrucciones de migración antes de aplicar cambios. No elimines el volumen Docker `pgdata`.
