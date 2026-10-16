@@ -26,7 +26,7 @@ jobs:
           import re
           for html_path in sorted(Path("app/static").glob("*.html")):
               html = html_path.read_text(encoding="utf-8")
-              scripts = [s for s in re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>', html, flags=re.I | re.S) if s.strip()]
+              scripts = [s for s in re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, flags=re.I | re.S) if s.strip()]
               for index, script in enumerate(scripts):
                   output = Path("/tmp") / f"{html_path.stem}-{index}.js"
                   output.write_text(script, encoding="utf-8")
