@@ -112,7 +112,7 @@ def test_read_only_shared_copy_can_exit_without_checkpoint_or_restore():
     # Editing remains unavailable in the UI; server-side authorization remains authoritative.
     assert "activateReadOnlyMode" in html
     assert "if(job?.can_edit===false){activateReadOnlyMode();return true;}" in html
-    assert "Acceso de solo lectura" in html
+    assert "Read-only access" in html
     assert "assessFinding|assessRelationship|assessCorrelation|saveEntity|saveRelationship|openEntityEdit|openRelationshipEdit|attachSelectedFindingsToEntity" in html
     from pathlib import Path
     auth_source = (Path(__file__).resolve().parents[1] / "app" / "auth.py").read_text(encoding="utf-8")
@@ -271,12 +271,13 @@ def test_entity_provisioning_is_admin_only_and_exposed_in_admin_workspace():
         login = client.get("/ui")
         workspace = client.get("/ui/workspace")
     assert login.status_code == 200
-    assert 'value="entity"' not in login.text
+    assert 'value="entity"' in login.text
+    assert "/auth/register-entity" in login.text
     assert workspace.status_code == 200
     assert 'id="adminCreateOrganizationForm"' in workspace.text
     assert 'id="adminOrganizationIdentifier"' in workspace.text
     assert 'id="adminOrganizationEmail"' in workspace.text
-    assert 'value="entity"' in workspace.text
+    assert 'value="entity"' not in workspace.text
     assert 'id="entityManagementPanel"' in workspace.text
     assert 'loadEntityManagement' in workspace.text
     assert "/admin/organizations" in workspace.text
