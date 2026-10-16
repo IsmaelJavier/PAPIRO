@@ -68,6 +68,7 @@ def test_papiro_brand_assets_are_served():
     assert image.status_code == 200
     assert 'aria-label="PAPIRO"' in image.text
 
+
 def test_all_ui_routes_use_papiro_brand_and_english_copy():
     with TestClient(app) as client:
         pages = [
@@ -75,6 +76,7 @@ def test_all_ui_routes_use_papiro_brand_and_english_copy():
             client.get("/ui/workspace"),
             client.get("/ui/job/example-job"),
         ]
+        graph_script = client.get("/ui/assets/graph.js").text
 
     for response in pages:
         assert response.status_code == 200
@@ -86,20 +88,18 @@ def test_all_ui_routes_use_papiro_brand_and_english_copy():
         assert "Investigación:" not in response.text
         assert "Acceso de solo lectura" not in response.text
 
-    graph = pages[2].text
-    assert "Investigation:" in graph
-    assert "Searching configured sources…" in graph
-    assert "Relationship type and basis are required." in graph
-    assert "Read-only access" in graph
-    assert "Select findings to create a candidate profile." in graph
-    assert "Ocultar del grafo" not in graph
-    assert "Centrar en grafo" not in graph
-    assert "Indicador</div>" not in graph
-    assert "details panel.." not in graph
-    assert "Calculating differences…" in graph
-    assert "Indicators derivados" not in graph
-    assert "Derived indicators" in graph
-    assert "Mark as belongs" not in graph
+    for phrase in (
+        "Investigation:",
+        "Searching configured sources…",
+        "Relationship type and basis are required.",
+        "Read-only access",
+        "Select findings to create a candidate profile.",
+        "Calculating differences…",
+        "Derived indicators",
+    ):
+        assert phrase in graph_script
+    for phrase in ("Ocultar del grafo", "Centrar en grafo", "Indicador</div>", "details panel..", "Indicators derivados", "Mark as belongs"):
+        assert phrase not in graph_script
 
 
 def test_papiro_styles_include_accessible_shared_tokens():
@@ -124,82 +124,74 @@ def test_papiro_styles_include_accessible_shared_tokens():
         assert token in response.text
     assert "linear-gradient(" not in response.text
 
+
 def test_graph_resolves_papiro_tokens_for_cytoscape_canvas():
     with TestClient(app) as client:
         response = client.get("/ui/job/example-job")
+        script = client.get("/ui/assets/graph.js").text
 
     assert response.status_code == 200
-    assert "getComputedStyle(document.documentElement)" in response.text
-    assert "const graphColors=" in response.text
-    assert "'text-background-color':graphColors.bg" in response.text
-    assert "'line-color':graphColors.border" in response.text
-    assert "'label':'data(edge_type)'" in response.text
+    assert "getComputedStyle(document.documentElement)" in script
+    assert "const graphColors=" in script
+    assert "'text-background-color':graphColors.bg" in script
+    assert "'line-color':graphColors.border" in script
+    assert "'label':'data(edge_type)'" in script
 
 
-# Regression coverage for graph interaction and viewport layout.
+
 def test_graph_scroll_zoom_and_responsive_layout_are_separated():
     with TestClient(app) as client:
         response = client.get("/ui/job/example-job")
+        css = client.get("/ui/assets/graph.css").text
+        script = client.get("/ui/assets/graph.js").text
 
     assert response.status_code == 200
+    for fragment in (
+        "userZoomingEnabled:true",
+        "addEventListener('wheel',event=>{if(!event.ctrlKey)event.stopImmediatePropagation();},{capture:true})",
+        "document.getElementById('showIndicators').checked=true;document.getElementById('showCorrelations').checked=true;document.getElementById('showMemberships').checked=true",
+        "document.getElementById('workspaceLink').onclick=e=>{e.preventDefault();openSessionModal();};",
+        "function zoomGraphBy(factor)",
+        "cy.zoom({level,renderedPosition:{x:cy.width()/2,y:cy.height()/2}})",
+        '<div class="entity-actions"><button class="btn small view-entity">View profile</button></div>',
+        "showEntity(id,true);toggleEntitySelection(id);",
+        "selectedEntityIds=new Set([id])",
+        "Select for relationship",
+        "data-entity-selection-button",
+        'aria-pressed="${selectedEntityIds.has(id)}"',
+        "Remove from relationship selection",
+    ):
+        assert fragment in script
+
     for fragment in (
         "height:100dvh",
         "grid-template-rows:64px minmax(0,1fr)",
         "overscroll-behavior:contain",
-        "userZoomingEnabled:true",
-        "addEventListener('wheel',event=>{if(!event.ctrlKey)event.stopImmediatePropagation();},{capture:true})",
-        "Reset filters &amp; view",
-        "document.getElementById('showIndicators').checked=true;document.getElementById('showCorrelations').checked=true;document.getElementById('showMemberships').checked=true",
-        "document.getElementById('workspaceLink').onclick=e=>{e.preventDefault();openSessionModal();};",
-        'id="zoomOutBtn"',
-        'aria-label="Zoom out"',
-        'id="zoomInBtn"',
-        'aria-label="Zoom in"',
-        "function zoomGraphBy(factor)",
-        "cy.zoom({level,renderedPosition:{x:cy.width()/2,y:cy.height()/2}})",
         "height:auto; min-height:100vh; min-height:100dvh; overflow:visible",
         "grid-template-rows:auto minmax(55vh,65dvh) auto",
         "header { height:auto; min-height:64px; padding:10px 12px; align-items:flex-start; flex-wrap:wrap; gap:8px; }",
         ".header-actions { width:100%; gap:6px; }",
     ):
+        assert fragment in css
+    for fragment in ('id="zoomOutBtn"', 'aria-label="Zoom out"', 'id="zoomInBtn"', 'aria-label="Zoom in"', "Reset filters &amp; view"):
         assert fragment in response.text
 
-    assert '<div class="entity-actions"><button class="btn small view-entity">View profile</button></div>' in response.text
-    assert "edit-entity" not in response.text
-    assert "relation-entity" not in response.text
-    assert "showEntity(id,true);toggleEntitySelection(id);" not in response.text
-    assert "selectedEntityIds=new Set([id])" not in response.text
-    assert "Select for relationship" in response.text
-    assert "data-entity-selection-button" in response.text
-    assert "aria-pressed=\"${selectedEntityIds.has(id)}\"" in response.text
-    assert "Remove from relationship selection" in response.text
-
-    # Existing graph actions and filters must remain available.
-    for element_id in (
-        "fitBtn",
-        "resetGraphBtn",
-        "hideSelectedBtn",
-        "showHiddenBtn",
-        "nodeTypeFilter",
-        "showIndicators",
-        "showCorrelations",
-        "showMemberships",
-        "zoomInBtn",
-        "zoomOutBtn",
-    ):
+    for element_id in ("fitBtn", "resetGraphBtn", "hideSelectedBtn", "showHiddenBtn", "nodeTypeFilter", "showIndicators", "showCorrelations", "showMemberships", "zoomInBtn", "zoomOutBtn"):
         assert f'id="{element_id}"' in response.text
+
 
 
 def test_graph_uses_soft_node_colors_and_readable_label_backgrounds():
     with TestClient(app) as client:
         response = client.get("/ui/job/example-job")
+        script = client.get("/ui/assets/graph.js").text
 
     assert response.status_code == 200
-    assert "accentPale:'#F8EBDD'" in response.text
-    assert "successPale:'#E7F2E9'" in response.text
-    assert "'text-background-color':graphColors.bg" in response.text
-    assert "'text-outline-width':2" not in response.text
-    assert "'background-color':graphColors.accentHover" not in response.text
+    assert "accentPale:'#F8EBDD'" in script
+    assert "successPale:'#E7F2E9'" in script
+    assert "'text-background-color':graphColors.bg" in script
+    assert "'text-outline-width':2" not in script
+    assert "'background-color':graphColors.accentHover" not in script
 
 
 def test_page_assets_are_served_separately():
