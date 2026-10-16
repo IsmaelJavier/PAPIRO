@@ -66,3 +66,5 @@ La configuración actual utiliza `network_mode: host`; en algunos sistemas o con
 
 - **Investigador:** puede realizar investigaciones privadas o investigaciones para una entidad a la que pertenezca.
 - **Entidad:** puede administrar a varios investigadores.
+
+usuarios de prueba: prueba0@kami.com; prueba1@kami.com; entidad1@kami.com; entidad2@kami.com <--contraseñas:123456789012 | admin: kami@kami.com  <--contraseña:Kami12345678
