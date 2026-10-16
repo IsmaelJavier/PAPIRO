@@ -453,13 +453,11 @@ function renderEntities(){
   list.innerHTML=entities.map(e=>`<div class="entity-card ${selectedEntityIds.has(e.id)?'selected':''}" data-entity="${esc(e.id)}">
     <div class="entity-name">${esc(e.label)}</div>
     <div class="entity-meta">${e.findings.length} associated finding(s) · ${esc(e.entity_type)}</div>
-    <div class="entity-actions"><button class="btn small view-entity">View profile</button><button class="btn small edit-entity">Edit</button><button class="btn small relation-entity">Relationship</button></div>
+    <div class="entity-actions"><button class="btn small view-entity">View profile</button></div>
   </div>`).join('');
   list.querySelectorAll('.entity-card').forEach(el=>{
     const id=el.dataset.entity;
     el.querySelector('.view-entity').onclick=()=>showEntity(id);
-    el.querySelector('.edit-entity').onclick=()=>openEntityEdit(id);
-    el.querySelector('.relation-entity').onclick=()=>toggleEntitySelection(id);
   });
 }
 function toggleEntitySelection(id){
@@ -605,7 +603,7 @@ function buildGraph(preserve=true){
   // Let the browser handle ordinary wheel scrolling; Ctrl+wheel remains available for graph zoom.
   document.getElementById('cy').addEventListener('wheel',event=>{if(!event.ctrlKey)event.stopImmediatePropagation();},{capture:true});
   cy.on('dragfree','node',savePositions);
-  cy.on('tap','node',e=>{selectedElement=e.target.data();const d=selectedElement;if(d.node_type==='finding')showFinding(d.id.replace('finding:',''));else if(d.node_type==='entity'){const id=d.id.replace('entity:','');showEntity(id,true);toggleEntitySelection(id);}else setDetails(`<div class="detail-title">Indicator</div><div class="detail-sub">${esc(d.indicator_type||'')}</div>${kv('Value',d.label)}${kv('Normalized',d.normalized_value)}${kv('Source',d.source||'')}`);});
+  cy.on('tap','node',e=>{selectedElement=e.target.data();const d=selectedElement;if(d.node_type==='finding')showFinding(d.id.replace('finding:',''));else if(d.node_type==='entity'){const id=d.id.replace('entity:','');showEntity(id);}else setDetails(`<div class="detail-title">Indicator</div><div class="detail-sub">${esc(d.indicator_type||'')}</div>${kv('Value',d.label)}${kv('Normalized',d.normalized_value)}${kv('Source',d.source||'')}`);});
   cy.on('tap','edge',e=>{const d=e.target.data();if(d.edge_type==='correlation')showCorrelation(d.correlation_id);else if(d.edge_type==='relationship')showRelationship(d.relationship_id);else setDetails(`<div class="detail-title">Evidence ↔ indicator</div>${kv('Evidence basis',d.basis||'')}`);});
   if(!allKnown&&preserve){const knownIds=Object.keys(stored);cy.one('layoutstop',()=>{knownIds.forEach(id=>{const n=cy.getElementById(id);if(n.length)n.position(stored[id]);});savePositions();});}
   else if(!allKnown)cy.one('layoutstop',savePositions);
