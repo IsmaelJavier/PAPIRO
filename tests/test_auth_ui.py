@@ -3,6 +3,10 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+def test_api_metadata_uses_papiro_brand():
+    assert app.title == "PAPIRO"
+
+
 def test_ui_landing_is_only_for_login_and_registration():
     with TestClient(app) as client:
         response = client.get("/ui")
@@ -57,6 +61,11 @@ def test_investigation_ui_has_autosave_exit_and_logout_confirmation():
         assert "/checkpoint/commit" in script
         assert "Save and exit" in script
         assert "rememberLocalBaseline" in script
+        assert "papiro:access-token" in script
+        assert "kami:access-token" in script
+        assert "papiro:hidden:" in script
+        assert "kami:hidden:" in script
+        assert "papiro:positions:" in script
 
 
 def test_papiro_brand_assets_are_served():
