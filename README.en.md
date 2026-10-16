@@ -1,8 +1,8 @@
 # PAPIRO
 
-**PAPIRO is an OSINT platform under development for investigating people using publicly available information.** It gathers findings from supported sources, organizes indicators, surfaces possible matches, and helps investigators build candidate profiles and explore relationships in a graph.
+**PAPIRO is an OSINT platform under development for investigating people using publicly available information.** Its long-term goal is to automate as much of the process as possible: collect information from multiple sources, discover and correlate indicators, resolve candidate identities, and expand investigations iteratively as new data emerges—even when working with large volumes of information.
 
-Its purpose is to help investigators organize and assess leads—not to automatically establish a person's identity or replace human verification.
+This describes the intended direction, not the level of automation available today. The current version is an initial functional foundation for running limited searches, organizing findings, and examining correlations. Significant work remains before it can support automated, iterative, and scalable investigations.
 
 - [Español](README.md) · [Русский](README.ru.md)
 
@@ -15,11 +15,11 @@ Its purpose is to help investigators organize and assess leads—not to automati
 - Create candidate profiles, associate findings, and explore relationships in a graph.
 - Use authenticated investigator accounts.
 
-## Known limitations
+## Current limitations
 
-- Source coverage is limited, and name searches must be started manually.
-- Correlation is deterministic: a matching indicator is a lead, not a confirmed identity.
-- Iterative searches based on newly discovered findings and broader source coverage are still pending.
+- Source coverage is limited, and searches must be started manually.
+- Correlation relies on deterministic rules and exact matches; it is not yet a complete identity-resolution mechanism.
+- Iteratively expanding searches from new findings and analyzing data at scale remain future work.
 - Persistent editing and deletion of graph elements need further work.
 - The platform does not use AI/ML and still needs additional testing and formal validation.
 - **It is not production-ready** and should not be exposed to untrusted networks without a security review.
@@ -80,6 +80,6 @@ Run the tests in your own environment; this README does not guarantee that all t
 
 ## Responsible use
 
-Investigate only with a lawful basis and respect privacy and source terms. Verify each finding against its context and provenance. **Do not treat a match, candidate profile, or graph relationship as definitive proof of identity.**
+Investigate only with a lawful basis and respect privacy and source terms. Preserve information provenance and verify results: a match, candidate profile, or graph relationship is not, by itself, a confirmed identification.
 
 If you use a database from an older version, back it up and review the schema and migration instructions before applying changes. Do not delete the Docker `pgdata` volume.
