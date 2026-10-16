@@ -96,6 +96,9 @@ def test_all_ui_routes_use_papiro_brand_and_english_copy():
     assert "Indicador</div>" not in graph
     assert "details panel.." not in graph
     assert "Calculating differences…" in graph
+    assert "Indicators derivados" not in graph
+    assert "Derived indicators" in graph
+    assert "Mark as belongs" not in graph
 
 
 def test_papiro_styles_include_accessible_shared_tokens():
