@@ -169,6 +169,9 @@ def test_graph_scroll_zoom_and_responsive_layout_are_separated():
     assert "showEntity(id,true);toggleEntitySelection(id);" not in response.text
     assert "selectedEntityIds=new Set([id])" not in response.text
     assert "Select for relationship" in response.text
+    assert "data-entity-selection-button" in response.text
+    assert "aria-pressed=\"${selectedEntityIds.has(id)}\"" in response.text
+    assert "Remove from relationship selection" in response.text
 
     # Existing graph actions and filters must remain available.
     for element_id in (
