@@ -159,6 +159,12 @@ def test_graph_scroll_zoom_and_responsive_layout_are_separated():
     ):
         assert fragment in response.text
 
+    assert '<div class="entity-actions"><button class="btn small view-entity">View profile</button></div>' in response.text
+    assert "edit-entity" not in response.text
+    assert "relation-entity" not in response.text
+    assert "showEntity(id,true);toggleEntitySelection(id);" not in response.text
+    assert "Select for relationship" in response.text
+
     # Existing graph actions and filters must remain available.
     for element_id in (
         "fitBtn",
