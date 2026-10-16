@@ -26,7 +26,7 @@ def test_workspace_has_own_dashboard_and_optional_investigation_creation():
         assert 'id="totalInvestigations"' in response.text
         assert 'id="newInvestigationButton"' in response.text
         assert 'id="investigationForm" hidden' in response.text
-        assert "Creating an investigation is optional." in response.text
+        assert "it is not required to access your workspace." in response.text
         assert 'id="logoutModal"' in response.text
         assert 'id="investigationName"' in response.text
         assert 'id="investigationNotes"' in response.text
@@ -126,7 +126,7 @@ def test_graph_resolves_papiro_tokens_for_cytoscape_canvas():
     assert response.status_code == 200
     assert "getComputedStyle(document.documentElement)" in response.text
     assert "const graphColors=" in response.text
-    assert "'text-outline-color':graphColors.surface" in response.text
+    assert "'text-background-color':graphColors.bg" in response.text
     assert "'line-color':graphColors.border" in response.text
     assert "'label':'data(edge_type)'" in response.text
 
