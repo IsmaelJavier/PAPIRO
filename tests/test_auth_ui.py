@@ -154,6 +154,8 @@ def test_graph_scroll_zoom_and_responsive_layout_are_separated():
         "cy.zoom({level,renderedPosition:{x:cy.width()/2,y:cy.height()/2}})",
         "height:auto; min-height:100vh; min-height:100dvh; overflow:visible",
         "grid-template-rows:auto minmax(55vh,65dvh) auto",
+        "header { height:auto; min-height:64px; padding:10px 12px; align-items:flex-start; flex-wrap:wrap; gap:8px; }",
+        ".header-actions { width:100%; gap:6px; }",
     ):
         assert fragment in response.text
 
