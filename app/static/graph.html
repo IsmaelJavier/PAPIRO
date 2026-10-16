@@ -74,6 +74,12 @@
     .graph-tools .btn { box-shadow:0 1px 4px var(--shadow); }
     .zoom-controls { display:flex; gap:4px; }
     .zoom-controls .btn { min-width:34px; min-height:32px; padding:4px 9px; font-size:16px; line-height:1; }
+    .graph-filter-group { border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:5px 9px; font-size:11px; color:var(--muted); }
+    .graph-filter-group summary { cursor:pointer; font-weight:600; padding:3px 0; }
+    .graph-filter-options { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:7px 0 3px; }
+    .graph-filter-options label { display:flex; align-items:center; gap:5px; white-space:nowrap; }
+    .graph-filter-options select { width:auto; max-width:170px; padding:5px 7px; font-size:11px; }
+    .graph-filter-options input { width:auto; margin:0; }
     .legend { position:absolute; bottom:12px; left:12px; z-index:3; max-width:360px; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:10px; color:var(--muted); box-shadow:0 1px 4px var(--shadow); }
     .detail-title { font-size:16px; font-weight:600; margin-bottom:3px; word-break:break-word; }
     .detail-sub { color:var(--muted); font-size:11px; margin-bottom:12px; }
@@ -117,14 +123,13 @@
     </div>
     <div class="header-actions">
       <span id="saveStatus" role="status" aria-live="polite">Autosave is on</span>
-      <a id="workspaceLink" href="/ui/workspace">Workspace</a>
+      <a id="workspaceLink" href="/ui/workspace">Back to workspace</a>
       <!-- Collaboration is deferred; its code is retained for possible future activation. -->
       <button id="shareInvestigationBtn" type="button" hidden>Share</button>
       <button id="mergeInvestigationBtn" type="button" hidden>Pull / merge</button>
       <button id="sharedCommentsBtn" type="button" hidden>Comments</button>
-      <button id="saveExitBtn" type="button">Save and exit</button>
       <button id="authBtn" type="button">Sign out</button>
-      <button id="reloadBtn" type="button">Refresh</button>
+      <button id="reloadBtn" type="button" title="Reload investigation data without leaving this page">Refresh data</button>
     </div>
   </header>
   <div class="modal-backdrop" id="shareInvestigationModal" hidden role="dialog" aria-modal="true"><div class="modal"><header><h2>Share investigation</h2><button class="btn small" type="button" onclick="closeModal('shareInvestigationModal')">Close</button></header><div class="modal-body"><p>An independent copy will be created for the invited investigator. Their changes will not affect the original until you merge them.</p><form id="shareInvestigationForm"><div class="field"><label for="shareEmail">Investigator email</label><input id="shareEmail" type="email" maxlength="320" required></div><div class="field"><label for="sharePermission">Permissions</label><select id="sharePermission"><option value="read">Read only</option><option value="comment">Read and comment</option><option value="edit">Edit and comment</option></select></div><p class="error" id="shareError" role="alert"></p><p id="shareResult" role="status"></p><div class="modal-footer"><button class="btn primary" type="submit" id="shareSubmitBtn">Create shared copy</button></div></form></div></div></div>
@@ -152,8 +157,8 @@
       </section>
       <section class="section">
         <h2>2 · Collected evidence</h2>
-        <div class="field"><label>Filter by source</label><select id="sourceFilter"><option value="all">All sources</option></select></div>
-        <div class="field"><label>Search</label><input id="findingSearch" placeholder="name, URL, username…"></div>
+        <div class="field"><label for="sourceFilter">Filter evidence and graph by source</label><select id="sourceFilter"><option value="all">All sources</option></select></div>
+        <div class="field"><label for="findingSearch">Search evidence and graph</label><input id="findingSearch" placeholder="name, URL, username…"></div>
         <div class="toolbar">
           <button class="btn small" id="selectVisible">Select visible</button>
           <button class="btn small" id="clearSelection">Clear selection</button>
@@ -174,16 +179,21 @@
           <button class="btn small" id="zoomOutBtn" type="button" aria-label="Zoom out" title="Zoom out">−</button>
           <button class="btn small" id="zoomInBtn" type="button" aria-label="Zoom in" title="Zoom in">+</button>
         </div>
-        <button class="btn small" id="fitBtn">Fit view</button>
-        <button class="btn small" id="resetGraphBtn">Reset view</button>
-        <button class="btn small" id="hideSelectedBtn">Hide selected</button>
-        <button class="btn small" id="showHiddenBtn">Show hidden</button>
-        <select class="btn small" id="nodeTypeFilter" style="width:auto"><option value="all">All nodes</option><option value="finding">Findings</option><option value="indicator">Indicators</option><option value="entity">Entities</option></select>
-        <div class="graph-options">
-          <label><input type="checkbox" id="showIndicators" checked> indicadores</label>
-          <label><input type="checkbox" id="showCorrelations" checked> correlations</label>
-          <label><input type="checkbox" id="showMemberships" checked> entity evidence</label>
-        </div>
+        <button class="btn small" id="fitBtn" type="button" title="Fit all visible graph elements without changing filters">Fit view</button>
+        <button class="btn small" id="resetGraphBtn" type="button" title="Clear graph filters and hidden nodes, then fit the view">Reset filters &amp; view</button>
+        <button class="btn small" id="hideSelectedBtn" type="button" title="Hide selected graph nodes">Hide selected nodes</button>
+        <button class="btn small" id="showHiddenBtn" type="button" title="Restore all hidden graph nodes">Show all hidden</button>
+        <details class="graph-filter-group">
+          <summary>Display filters</summary>
+          <div class="graph-filter-options">
+            <label for="nodeTypeFilter">Node type
+              <select id="nodeTypeFilter"><option value="all">All nodes</option><option value="finding">Findings</option><option value="indicator">Indicators</option><option value="entity">Entities</option></select>
+            </label>
+            <label><input type="checkbox" id="showIndicators" checked> Indicators</label>
+            <label><input type="checkbox" id="showCorrelations" checked> Correlations</label>
+            <label><input type="checkbox" id="showMemberships" checked> Entity evidence</label>
+          </div>
+        </details>
       </div>
       <div id="cy"></div>
       <div class="legend">The graph shows evidence, groupings, and relationships in this investigation. An entity is a reconstruction candidate, not automatically a confirmed identity.</div>
@@ -574,7 +584,7 @@ function buildGraph(preserve=true){
     successBorder:'#8DB99A',
     warning:'#A16207'
   };
-  cy=cytoscape({container:document.getElementById('cy'),elements:{nodes,edges},userZoomingEnabled:false,style:[
+  cy=cytoscape({container:document.getElementById('cy'),elements:{nodes,edges},userZoomingEnabled:true,style:[
     {selector:'node',style:{'label':'data(label)','font-size':11,'font-family':'Inter, system-ui, sans-serif','color':graphColors.text,'text-wrap':'wrap','text-max-width':160,'text-background-color':graphColors.bg,'text-background-opacity':0.94,'text-background-padding':3,'background-color':graphColors.surface,'width':36,'height':36,'border-width':1.5,'border-color':graphColors.muted,'text-valign':'bottom','text-halign':'center','text-margin-y':8}},
     {selector:'node[node_type="finding"]',style:{'shape':'roundrectangle','background-color':graphColors.surface,'border-color':graphColors.muted,'color':graphColors.text,'width':58,'height':42,'font-size':10}},
     {selector:'node[node_type="indicator"]',style:{'shape':'ellipse','background-color':graphColors.accentPale,'border-color':graphColors.accentBorder,'width':30,'height':30,'color':graphColors.text,'font-size':10}},
@@ -588,6 +598,8 @@ function buildGraph(preserve=true){
     {selector:'.investigator-selected',style:{'border-width':3,'border-color':graphColors.accent,'background-color':graphColors.accentPale}},
     {selector:':selected',style:{'border-width':3,'border-color':graphColors.accent,'line-color':graphColors.accent,'target-arrow-color':graphColors.accent}}
   ],layout:allKnown&&preserve?{name:'preset',positions:n=>stored[n.id()],fit:false}:{name:'cose',animate:false,padding:80,nodeRepulsion:12000,idealEdgeLength:150}});
+  // Let the browser handle ordinary wheel scrolling; Ctrl+wheel remains available for graph zoom.
+  document.getElementById('cy').addEventListener('wheel',event=>{if(!event.ctrlKey)event.stopImmediatePropagation();},{capture:true});
   cy.on('dragfree','node',savePositions);
   cy.on('tap','node',e=>{selectedElement=e.target.data();const d=selectedElement;if(d.node_type==='finding')showFinding(d.id.replace('finding:',''));else if(d.node_type==='entity'){const id=d.id.replace('entity:','');showEntity(id,true);toggleEntitySelection(id);}else setDetails(`<div class="detail-title">Indicador</div><div class="detail-sub">${esc(d.indicator_type||'')}</div>${kv('Value',d.label)}${kv('Normalized',d.normalized_value)}${kv('Source',d.source||'')}`);});
   cy.on('tap','edge',e=>{const d=e.target.data();if(d.edge_type==='correlation')showCorrelation(d.correlation_id);else if(d.edge_type==='relationship')showRelationship(d.relationship_id);else setDetails(`<div class="detail-title">Evidence ↔ indicator</div>${kv('Evidence basis',d.basis||'')}`);});
@@ -754,8 +766,7 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
   document.getElementById('saveAndLeave').onclick=leaveToWorkspace;
   document.getElementById('saveAndLogout').onclick=saveAndLogout;
   document.getElementById('logoutWithoutViewSave').onclick=logoutAndClearView;
-  document.getElementById('saveExitBtn').onclick=leaveToWorkspace;
-  document.getElementById('workspaceLink').onclick=e=>{e.preventDefault();leaveToWorkspace();};
+    document.getElementById('workspaceLink').onclick=e=>{e.preventDefault();leaveToWorkspace();};
   sessionModal.addEventListener('click',e=>{if(e.target===sessionModal)closeSessionModal();});
  });
  document.addEventListener('DOMContentLoaded',()=>{
