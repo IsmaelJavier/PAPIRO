@@ -24,6 +24,8 @@ Ese es el objetivo de evolución, no el nivel de automatización que ofrece la v
 - La plataforma no utiliza IA/ML y requiere más pruebas y validación formal.
 - **No está preparada para producción** ni debe exponerse a redes no confiables sin una revisión de seguridad.
 
+Como prioridad está pendiente reducir la lista de limitaciones y refactorizar y mejorar la seguridad del codigo
+
 ## Instalación
 
 Requisitos: Git, Docker y Docker Compose.
@@ -64,4 +66,5 @@ La configuración actual utiliza `network_mode: host`; en algunos sistemas o con
 
 usuario investigador: puede realizar investigaciones tanto privadas como para una entidad a la que pertenezca
 usuario entidad: puede administrar varios investigadores.
+
 
