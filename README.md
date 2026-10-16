@@ -21,16 +21,8 @@ Este es el objetivo de evolución, no el nivel de automatización que ofrece la 
 - La correlación se basa en reglas deterministas y coincidencias exactas; todavía no constituye un mecanismo completo de resolución de identidades.
 - La expansión iterativa de las búsquedas a partir de nuevos hallazgos y el análisis a gran escala están pendientes.
 - La edición y eliminación persistente de elementos del grafo necesitan mejoras.
-- La interfaz requiere mejoras de usabilidad para facilitar la revisión de hallazgos y la gestión de perfiles y relaciones.
 - La plataforma no utiliza IA/ML y necesita más pruebas y validación formal.
-- Es necesario seguir reduciendo estas limitaciones, refactorizar el código donde corresponda y reforzar la seguridad.
-
-**PAPIRO no está preparada para producción.** No la expongas a redes no confiables sin una revisión de seguridad.
-
-## Tipos de usuario
-
-- **Investigador:** puede realizar investigaciones privadas o trabajar en investigaciones vinculadas a una entidad a la que pertenezca.
-- **Entidad:** puede administrar a varios investigadores.
+- Es prioritario reducir estas limitaciones, refactorizar el código y reforzar la seguridad.
 
 ## Instalación
 
@@ -68,26 +60,9 @@ La configuración actual utiliza `network_mode: host`; en algunos sistemas o con
 2. Inicia sesión y crea una investigación.
 3. Ejecuta manualmente una búsqueda por nombre.
 4. Revisa los hallazgos, sus fuentes, los indicadores y las correlaciones.
-5. Si resulta útil, organiza los hallazgos en perfiles candidatos y explora las relaciones del grafo.
+5. Organiza los hallazgos en perfiles candidatos y explora las relaciones del grafo cuando resulte necesario.
 
-Para crear una cuenta de superusuario, ejecuta el comando **antes de registrar cualquier otra cuenta**:
+## Tipos de usuario
 
-```bash
-docker compose exec -it api python -m scripts.bootstrap_superuser
-```
-
-El script solicita el correo y la contraseña dos veces y exige una contraseña de al menos 12 caracteres. Solo funciona si todavía no existe ninguna cuenta.
-
-## Pruebas
-
-```bash
-docker compose run --rm api pytest -q
-```
-
-Ejecuta las pruebas en tu entorno; no se garantiza que todas pasen en cada versión.
-
-## Uso responsable y protección de datos
-
-Investiga únicamente con una base legal y respeta la privacidad y las condiciones de las fuentes. Conserva la procedencia de la información y verifica los resultados: una coincidencia, un perfil candidato o una relación del grafo no constituyen por sí solos una identificación confirmada.
-
-Si utilizas una base de datos de una versión anterior, haz una copia de seguridad y revisa el esquema y las instrucciones de migración antes de aplicar cambios. No elimines el volumen Docker `pgdata`.
+- **Investigador:** puede realizar investigaciones privadas o investigaciones para una entidad a la que pertenezca.
+- **Entidad:** puede administrar a varios investigadores.
