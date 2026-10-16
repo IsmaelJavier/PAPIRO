@@ -37,7 +37,7 @@ class WikidataSource:
     def __init__(self, client: httpx.Client | None = None):
         headers = {
             "Accept": "application/json",
-            "User-Agent": "Kami-no-Eye/0.1 (OSINT research prototype)",
+            "User-Agent": "PAPIRO/0.1 (OSINT research platform)",
         }
         self.client = client or httpx.Client(
             base_url="https://www.wikidata.org",
