@@ -24,15 +24,22 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
+          output_dir = Path("/tmp/papiro-inline-js")
+          output_dir.mkdir(parents=True, exist_ok=True)
           for html_path in sorted(Path("app/static").glob("*.html")):
               html = html_path.read_text(encoding="utf-8")
               scripts = [s for s in re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', html, flags=re.I | re.S) if s.strip()]
               for index, script in enumerate(scripts):
-                  output = Path("/tmp") / f"{html_path.stem}-{index}.js"
+                  output = output_dir / f"{html_path.stem}-{index}.js"
                   output.write_text(script, encoding="utf-8")
                   print(f"Checking {html_path} inline script {index}")
           PY
-          for script in /tmp/*.js; do node --check "$script"; done
+          scripts=(/tmp/papiro-inline-js/*.js)
+          if [[ -e "${scripts[0]}" ]]; then
+            for script in "${scripts[@]}"; do node --check "$script"; done
+          else
+            echo "No inline JavaScript found; skipping syntax checks."
+          fi
       - name: Run tests
         env:
           AUTH_SECRET_KEY: "test-only-secret-key-at-least-32-characters"
