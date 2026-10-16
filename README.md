@@ -1,8 +1,8 @@
 # PAPIRO
 
-**PAPIRO es una plataforma OSINT en desarrollo para la investigación de personas a partir de información disponible públicamente.** Su objetivo a largo plazo es automatizar la mayor parte posible del proceso: recopilar información de múltiples fuentes, descubrir y correlacionar indicadores, resolver identidades candidatas y ampliar la investigación de forma iterativa a medida que aparecen nuevos datos, incluso cuando se trabaja con grandes volúmenes de información.
+**PAPIRO es una plataforma OSINT en desarrollo para investigar personas a partir de información disponible públicamente.** Su objetivo a largo plazo es automatizar la mayor parte posible del proceso: recopilar información de múltiples fuentes, descubrir y correlacionar indicadores, resolver identidades candidatas y ampliar las investigaciones de forma iterativa a medida que aparecen nuevos datos, incluso al trabajar con grandes volúmenes de información.
 
-Ese es el objetivo de evolución, no el nivel de automatización que ofrece la versión actual. Hoy PAPIRO es una base funcional inicial que permite ejecutar búsquedas acotadas, organizar hallazgos y examinar correlaciones; queda un trabajo considerable para alcanzar una investigación automatizada, iterativa y escalable.
+Este es el objetivo de evolución, no el nivel de automatización que ofrece la versión actual. PAPIRO cuenta hoy con una base funcional inicial para ejecutar búsquedas acotadas, organizar hallazgos y examinar correlaciones. Todavía queda un trabajo considerable para alcanzar una investigación automatizada, iterativa y escalable.
 
 - [English](README.en.md) · [Русский](README.ru.md)
 
@@ -10,21 +10,27 @@ Ese es el objetivo de evolución, no el nivel de automatización que ofrece la v
 
 - Crear investigaciones y lanzar manualmente búsquedas por nombre.
 - Consultar las fuentes implementadas: **GitHub y Wikidata**.
-- Revisar hallazgos con sus URL, procedencia e indicadores.
+- Revisar hallazgos junto con sus URL, procedencia e indicadores.
 - Detectar correlaciones mediante coincidencias exactas entre indicadores normalizados.
 - Crear perfiles candidatos, asociar hallazgos y explorar relaciones en un grafo.
-- Acceder mediante cuentas autenticadas de investigador.
+- Gestionar el acceso mediante cuentas autenticadas.
 
-## Limitaciones actuales
+## Limitaciones actuales y prioridades de desarrollo
 
 - La cobertura de fuentes es reducida y las búsquedas deben iniciarse manualmente.
 - La correlación se basa en reglas deterministas y coincidencias exactas; todavía no constituye un mecanismo completo de resolución de identidades.
-- La expansión iterativa de la búsqueda a partir de nuevos hallazgos y el análisis a gran escala aún están pendientes.
+- La expansión iterativa de las búsquedas a partir de nuevos hallazgos y el análisis a gran escala están pendientes.
 - La edición y eliminación persistente de elementos del grafo necesitan mejoras.
-- La plataforma no utiliza IA/ML y requiere más pruebas y validación formal.
-- **No está preparada para producción** ni debe exponerse a redes no confiables sin una revisión de seguridad.
+- La interfaz requiere mejoras de usabilidad para facilitar la revisión de hallazgos y la gestión de perfiles y relaciones.
+- La plataforma no utiliza IA/ML y necesita más pruebas y validación formal.
+- Es necesario seguir reduciendo estas limitaciones, refactorizar el código donde corresponda y reforzar la seguridad.
 
-Como prioridad está pendiente reducir la lista de limitaciones y refactorizar y mejorar la seguridad del codigo
+**PAPIRO no está preparada para producción.** No la expongas a redes no confiables sin una revisión de seguridad.
+
+## Tipos de usuario
+
+- **Investigador:** puede realizar investigaciones privadas o trabajar en investigaciones vinculadas a una entidad a la que pertenezca.
+- **Entidad:** puede administrar a varios investigadores.
 
 ## Instalación
 
@@ -62,9 +68,26 @@ La configuración actual utiliza `network_mode: host`; en algunos sistemas o con
 2. Inicia sesión y crea una investigación.
 3. Ejecuta manualmente una búsqueda por nombre.
 4. Revisa los hallazgos, sus fuentes, los indicadores y las correlaciones.
-5. Si resulta útil, organiza los hallazgos en perfiles candidatos y explora las relaciones del grafo. (requiere mejor UI/UX)
+5. Si resulta útil, organiza los hallazgos en perfiles candidatos y explora las relaciones del grafo.
 
-usuario investigador: puede realizar investigaciones tanto privadas como para una entidad a la que pertenezca
-usuario entidad: puede administrar varios investigadores.
+Para crear una cuenta de superusuario, ejecuta el comando **antes de registrar cualquier otra cuenta**:
 
+```bash
+docker compose exec -it api python -m scripts.bootstrap_superuser
+```
 
+El script solicita el correo y la contraseña dos veces y exige una contraseña de al menos 12 caracteres. Solo funciona si todavía no existe ninguna cuenta.
+
+## Pruebas
+
+```bash
+docker compose run --rm api pytest -q
+```
+
+Ejecuta las pruebas en tu entorno; no se garantiza que todas pasen en cada versión.
+
+## Uso responsable y protección de datos
+
+Investiga únicamente con una base legal y respeta la privacidad y las condiciones de las fuentes. Conserva la procedencia de la información y verifica los resultados: una coincidencia, un perfil candidato o una relación del grafo no constituyen por sí solos una identificación confirmada.
+
+Si utilizas una base de datos de una versión anterior, haz una copia de seguridad y revisa el esquema y las instrucciones de migración antes de aplicar cambios. No elimines el volumen Docker `pgdata`.
