@@ -139,6 +139,8 @@ def test_graph_scroll_zoom_and_responsive_layout_are_separated():
         "userZoomingEnabled:true",
         "addEventListener('wheel',event=>{if(!event.ctrlKey)event.stopImmediatePropagation();},{capture:true})",
         "Reset filters &amp; view",
+        "document.getElementById('showIndicators').checked=true;document.getElementById('showCorrelations').checked=true;document.getElementById('showMemberships').checked=true",
+        "document.getElementById('workspaceLink').onclick=e=>{e.preventDefault();openSessionModal();};",
         'id="zoomOutBtn"',
         'aria-label="Zoom out"',
         'id="zoomInBtn"',
