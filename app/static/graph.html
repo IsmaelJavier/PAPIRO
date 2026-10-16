@@ -108,8 +108,12 @@
       .layout { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(55vh,65dvh) auto; height:auto; overflow:visible; }
       .left,.right { max-height:none; min-height:0; overflow:visible; overscroll-behavior:auto; border:0; border-bottom:1px solid var(--line); }
       .graph-wrap { min-height:55vh; min-height:65dvh; }
-      header { padding:0 12px; }
+      header { height:auto; min-height:64px; padding:10px 12px; align-items:flex-start; flex-wrap:wrap; gap:8px; }
       header .jobtext { display:none; }
+      .app { grid-template-rows:auto auto; }
+      .header-actions { width:100%; gap:6px; }
+      #saveStatus { min-width:0; }
+      .header-actions a,.header-actions button { min-height:36px; padding:6px 9px; }
     }
       [hidden] { display: none !important; }
 </style>
