@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="OSINT MVP", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="PAPIRO", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(organization_router)
