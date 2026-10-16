@@ -90,6 +90,7 @@ def test_all_ui_routes_use_papiro_brand_and_english_copy():
     assert "Searching configured sources…" in graph
     assert "Relationship type and basis are required." in graph
     assert "Read-only access" in graph
+    assert "Select findings to create a candidate profile." in graph
     assert "Ocultar del grafo" not in graph
     assert "Centrar en grafo" not in graph
     assert "Indicador</div>" not in graph
