@@ -333,6 +333,25 @@ Esta sección conserva el contexto útil de ramas distintas de `main`. No implic
 
 La rama de rediseño diverge históricamente de `main`; estos puntos son una lista de ideas y correcciones a contrastar, no una instrucción para reemplazar los archivos actuales por los de aquella rama.
 
+### Referencias de recuperación antes de borrar ramas
+
+Últimos SHA consultados en GitHub. Si después de borrar una rama se necesita recuperar algo, estos commits permiten localizar el código histórico mientras GitHub conserve los objetos:
+
+| Rama | Último SHA consultado | Motivo para conservar la referencia |
+|---|---|---|
+| `archive/main-before-canonical-2026-10-12` | `249ebc2eb0ca3714ecf9f3bec156683fa2a2ef49` | Histórico de organización de acceso/dashboard |
+| `feature/collaboration-pull-request-flow` | `9b4f960a6e0329db667774372561c3d7c9d74017` | Revisión vinculada a snapshot y merge de tres vías |
+| `feature/entity-onboarding-membership` | `dd9f1f7bce4166f30f0d92e4823243b8a566170c` | Onboarding de entidades y refinamientos de UI |
+| `feature/identity-authorization` | `7863bc024263f91850cd00063269180e35763c3e` | Autorización y consistencia al restaurar snapshots |
+| `feature/papiro-scroll-zoom-layout` | `2cb57577d69bb65d2dad6d83e8a79dfdeb3f39dd` | Selección de relaciones y ajustes de layout |
+| `fix/papiro-scroll-zoom-layout` | `6b5c7cd82e3c89eda4fac47c4f1e2ab4cfec3ec1` | Pruebas de regresión para scroll/zoom |
+| `fix/refresh-session-after-snapshot-restore` | `2ea6441b36cbb03619b95f964dde05e3c9c887ac` | Estado ORM tras restauración de snapshot |
+| `refactor/separate-ui-assets` | `e9c5d214d2d8c2dfd07c8c62b6232bd2de2bc7c0` | Separación CSS/JS; PR #8 sigue abierto |
+| `ui/hide-investigation-sharing` | `038cfc1c0f273689bb55aa8a6b0ca3a73efc1ca4` | Ocultación histórica de controles de colaboración |
+| `ui/papiro-redesign` | `6350f8314c628d6789a72833fa785ce6d57ee86e` | Rediseño PAPIRO y mejoras de navegación/estilo |
+
+Estos SHA son referencias históricas, no garantía de que la rama esté integrada ni de que sus pruebas pasen. Antes de borrar, cerrar o resolver cualquier pull request abierto y verificar que `main` siga siendo la rama predeterminada.
+
 ### Funcionalidades cuya historia ya está incorporada en `main`
 
 Las siguientes ramas no muestran commits exclusivos respecto a `main` en la comparación consultada; sus nombres se conservan aquí como contexto, no como trabajo pendiente:
