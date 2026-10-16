@@ -77,7 +77,12 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
-    memberships = orm_relationship("OrganizationMembership", back_populates="user", cascade="all, delete-orphan")
+    memberships = orm_relationship(
+        "OrganizationMembership",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="OrganizationMembership.user_id",
+    )
     owned_jobs = orm_relationship("Job", back_populates="owner")
 
 
