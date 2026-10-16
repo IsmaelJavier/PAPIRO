@@ -1,6 +1,6 @@
 # PAPIRO — reconstrucción asistida de huellas digitales abiertas
 
-PAPIRO es el prototipo de una plataforma OSINT para organizar evidencias públicas, examinar coincidencias entre ellas y construir perfiles candidatos y relaciones que un investigador pueda revisar. El proyecto busca ofrecer un flujo de trabajo trazable: los resultados deben conservar su fuente y no convertirse automáticamente en afirmaciones sobre la identidad de una persona.
+PAPIRO es el prototipo de una plataforma OSINT orientada a la investigación de personas para organizar evidencias públicas, examinar coincidencias entre ellas y construir perfiles candidatos y relaciones que un investigador pueda revisar. El proyecto busca ofrecer un flujo de trabajo trazable: los resultados deben conservar su fuente y no convertirse automáticamente en afirmaciones sobre la identidad de una persona.
 
 **Estado:** prototipo funcional en desarrollo. Incluye API, interfaz web, persistencia, recolección desde fuentes públicas seleccionadas, correlación determinista y un espacio de investigación con grafo. No es todavía una plataforma OSINT general ni un producto listo para producción.
 
