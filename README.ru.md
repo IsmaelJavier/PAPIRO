@@ -29,8 +29,8 @@
 Требуются Git, Docker и Docker Compose.
 
 ```bash
-git clone https://github.com/Starv1ng/Kami-no-Eye.git
-cd Kami-no-Eye
+git clone https://github.com/Starv1ng/PAPIRO.git
+cd PAPIRO
 cp .env.example .env
 ```
 
