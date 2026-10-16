@@ -1,28 +1,29 @@
 # PAPIRO
 
-PAPIRO is an OSINT prototype for collecting public information, reviewing matches, and organizing findings into candidate profiles and an investigation graph. **Matches are leads, not identity confirmation.**
+PAPIRO is an OSINT prototype for collecting public information, reviewing matches, and organizing findings into candidate profiles and an investigation graph. **A match is a lead, not proof of identity.**
 
 - [Español](README.md) · [Русский](README.ru.md)
 
-## Implemented
+## What you can do
 
-- Web interface and API with authentication and roles.
-- Name search across **GitHub and Wikidata**.
-- Findings with source URLs and indicators extracted from public data.
-- Deterministic correlation based on exact matches between normalized indicators.
-- Candidate profiles, finding associations, and relationships.
-- Investigation workspace to review evidence and explore the graph.
+- Create investigations and start name searches.
+- Query the configured sources: **GitHub and Wikidata**.
+- Review findings with their sources, URLs, and indicators.
+- Inspect deterministic correlations based on exact matches between normalized indicators.
+- Create candidate profiles, associate evidence, and explore relationships in the graph.
+- Use authenticated investigator accounts.
 
-## Installation
+## Quick installation
 
-Requirements: Git, Docker, and Docker Compose. The current Docker configuration uses `network_mode: host`; Docker Desktop and other environments may require network adjustments.
+Requirements: Git, Docker, and Docker Compose. Clone the repository:
 
 ```bash
 git clone https://github.com/Starv1ng/Kami-no-Eye.git
 cd Kami-no-Eye
-git switch main
 cp .env.example .env
 ```
+
+On Windows PowerShell, use `Copy-Item .env.example .env` instead.
 
 Edit `.env` and replace `AUTH_SECRET_KEY` with your own random secret of at least 32 characters. Generate one with:
 
@@ -30,46 +31,52 @@ Edit `.env` and replace `AUTH_SECRET_KEY` with your own random secret of at leas
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Start the services:
+Start the application:
 
 ```bash
 docker compose up --build -d
 docker compose ps
 ```
 
-Open the app at [http://127.0.0.1:8000/ui](http://127.0.0.1:8000/ui). API documentation: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+Open the [web interface](http://127.0.0.1:8000/ui). The [API documentation](http://127.0.0.1:8000/docs) is available for technical use.
 
-**Database:** for a new installation with all identity and role features, review and apply migrations in `migrations/` (002, 003, 004, 006, and 007, in that order; apply 004 with `docker compose exec api python -m scripts.apply_identity_migration`). Back up an existing database before migrating. Do not delete the `pgdata` volume.
+**Do you need to run migrations?**
+- **Fresh clone with an empty database:** no. On startup, the application creates tables for the current models.
+- **An existing database from an older version:** migrations may be required. Back up the database first, then inspect the migration instructions and actual schema before running scripts in `migrations/`. Do not delete the `pgdata` volume.
 
-After migration 004, create the first administrator:
+The current Docker configuration uses `network_mode: host`; some operating systems or Docker Desktop setups may require network adjustments.
+
+## How to use it
+
+1. Open the interface and select **Create account** to register as an **Investigator**. Passwords must be at least 12 characters.
+2. Sign in and create an investigation.
+3. Manually start a name search; creating an investigation does not start one automatically.
+4. Review findings, sources, indicators, and correlations.
+5. Create candidate profiles, associate evidence, and explore graph relationships.
+6. Treat matches cautiously: they are not definitive identity evidence.
+
+If you need a superuser account for administration, create it **before registering any other account**:
 
 ```bash
 docker compose exec -it api python -m scripts.bootstrap_superuser
 ```
 
-The script prompts for an email and password (at least 12 characters). It only runs if no account exists yet.
+The script asks for an email and password twice, requires at least 12 characters, and only works when no account exists yet.
 
-## Try it
-
-1. Sign in to the interface.
-2. Create an investigation.
-3. **Manually start** a name search; creating an investigation does not start a search.
-4. Review findings, sources, indicators, and correlations.
-5. Create candidate profiles, associate evidence, and inspect relationships in the graph.
-6. Assess matches carefully: they do not prove that findings belong to the same person.
-
-Run automated tests:
+## Tests
 
 ```bash
 docker compose run --rm api pytest -q
 ```
 
+Run the tests in your own environment; this README does not assume that every test currently passes.
+
 ## Future work
 
-- Iterative searches using newly discovered indicators.
+- Iterative searches based on newly discovered indicators.
 - More sources and broader coverage.
-- More complete graph editing and persistence.
+- More complete persistent graph editing and deletion.
 - Additional UI, authorization, and installation tests.
 - Formal validation of the method and platform evaluation.
 
-PAPIRO is still under development, does not use AI/ML, and is not production-ready. Use public data lawfully and review security settings before exposing the app to other networks.
+PAPIRO is still under development, does not use AI/ML, and is not production-ready. Use public information lawfully and review security before exposing the instance to other networks.
