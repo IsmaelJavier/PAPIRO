@@ -1,4 +1,4 @@
--- Kami-no-Eye migration 002
+-- PAPIRO migration 002
 -- Preserves existing findings while correcting semantic nomenclature and
 -- adding deterministic cross-source correlation.
 --
