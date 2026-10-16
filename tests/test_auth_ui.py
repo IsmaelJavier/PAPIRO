@@ -125,6 +125,7 @@ def test_graph_resolves_papiro_tokens_for_cytoscape_canvas():
     assert "'label':'data(edge_type)'" in response.text
 
 
+# Regression coverage for graph interaction and viewport layout.
 def test_graph_scroll_zoom_and_responsive_layout_are_separated():
     with TestClient(app) as client:
         response = client.get("/ui/job/example-job")
