@@ -35,7 +35,7 @@ class GitHubSource:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2026-03-10",
-            "User-Agent": "osint-mvp/0.1",
+            "User-Agent": "PAPIRO/0.1 (OSINT research platform)",
         }
 
         if settings.github_token:
