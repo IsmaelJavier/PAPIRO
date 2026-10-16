@@ -271,13 +271,12 @@ def test_entity_provisioning_is_admin_only_and_exposed_in_admin_workspace():
         login = client.get("/ui")
         workspace = client.get("/ui/workspace")
     assert login.status_code == 200
-    assert 'value="entity"' in login.text
-    assert "/auth/register-entity" in login.text
+    assert 'value="entity"' not in login.text
     assert workspace.status_code == 200
     assert 'id="adminCreateOrganizationForm"' in workspace.text
     assert 'id="adminOrganizationIdentifier"' in workspace.text
     assert 'id="adminOrganizationEmail"' in workspace.text
-    assert 'value="entity"' in workspace.text
+    assert 'value="entity"' not in workspace.text
     assert 'id="entityManagementPanel"' in workspace.text
     assert 'loadEntityManagement' in workspace.text
     assert "/admin/organizations" in workspace.text
