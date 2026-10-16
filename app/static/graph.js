@@ -266,7 +266,7 @@ async function saveRelationship(){
 function readPositions(){ try{return JSON.parse(localStorage.getItem(positionKey)||'{}')}catch{return {};} }
 function setSaveStatus(message){const el=document.getElementById('saveStatus');if(el)el.textContent=message;}
 function savePositions(){ if(!cy)return; const positions={}; cy.nodes().forEach(n=>{positions[n.id()]={x:n.position('x'),y:n.position('y')};}); localStorage.setItem(positionKey,JSON.stringify(positions));setSaveStatus('View saved automatically'); }
-function persistHidden(){localStorage.setItem(`kami:hidden:${jobId}`,JSON.stringify([...hiddenNodeIds]));setSaveStatus('View saved automatically');}
+function persistHidden(){localStorage.setItem(`papiro:hidden:${jobId}`,JSON.stringify([...hiddenNodeIds]));setSaveStatus('View saved automatically');}
 function hideNode(id){hiddenNodeIds.add(id);persistHidden();applyGraphFilters();}
 function showAllHidden(){hiddenNodeIds.clear();persistHidden();applyGraphFilters();}
 function focusNode(id){if(!cy)return;hiddenNodeIds.delete(id);persistHidden();applyGraphFilters();const n=cy.getElementById(id);if(n.length){cy.animate({fit:{eles:n,padding:140},duration:250});n.select();}}
@@ -345,8 +345,9 @@ document.getElementById('mergeInvestigationBtn').onclick=async()=>{openModal('me
 
  document.addEventListener('DOMContentLoaded',()=>{
   const sessionModal=document.getElementById('sessionModal');
-  const baselineKey=`kami:session-baseline:${jobId}`;
-  const hiddenKey=`kami:hidden:${jobId}`;
+  const baselineKey=`papiro:session-baseline:${jobId}`;
+  const hiddenKey=`papiro:hidden:${jobId}`;
+  readMigratedStorage(baselineKey, `kami:session-baseline:${jobId}`);
   let checkpointReady=false;
   let checkpointPromise=null;
   let exitInProgress=false;
