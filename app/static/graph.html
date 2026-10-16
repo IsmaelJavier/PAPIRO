@@ -11,7 +11,7 @@
     body { margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--ink); }
     button,input,select,textarea { font:inherit; }
     button { cursor:pointer; }
-    .app { min-height:100vh; display:grid; grid-template-rows:64px 1fr; }
+    .app { height:100vh; height:100dvh; min-height:0; display:grid; grid-template-rows:64px minmax(0,1fr); overflow:hidden; }
     header { display:flex; align-items:center; justify-content:space-between; padding:0 20px; background:var(--dark); color:var(--surface); }
     header h1 { margin:0; font-size:18px; letter-spacing:.1px; }
     header .sub { font-size:12px; color:var(--text-muted); margin-top:3px; }
@@ -24,10 +24,11 @@
     .session-modal-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:18px; }
     .btn.danger-fill { background:var(--danger); border-color:var(--danger); color:var(--surface); }
     .header-actions a,.header-actions button { color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:8px 11px; text-decoration:none; }
-    .layout { display:grid; grid-template-columns:310px minmax(420px,1fr) 370px; min-height:0; }
+    .layout { display:grid; grid-template-columns:minmax(260px,310px) minmax(0,1fr) minmax(300px,370px); min-height:0; height:100%; overflow:hidden; }
     .panel { background:var(--panel); min-height:0; }
-    .left { border-right:1px solid var(--line); overflow:auto; }
-    .right { border-left:1px solid var(--line); overflow:auto; }
+    .left,.right { min-width:0; min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+    .left { border-right:1px solid var(--line); }
+    .right { border-left:1px solid var(--line); }
     .section { padding:14px 15px; border-bottom:1px solid var(--line); }
     .section h2 { margin:0 0 10px; font-size:14px; }
     .section h3 { margin:0 0 7px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
@@ -67,10 +68,12 @@
     .graph-options { display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:11px; color:var(--muted); }
     .graph-options label { display:flex; align-items:center; gap:4px; }
     .graph-options input { width:auto; }
-    .graph-wrap { position:relative; min-width:0; min-height:0; background:var(--surface-subtle); }
+    .graph-wrap { position:relative; min-width:0; min-height:0; overflow:hidden; background:var(--surface-subtle); }
     #cy { position:absolute; inset:0; }
-    .graph-tools { position:absolute; top:12px; left:12px; z-index:3; display:flex; gap:7px; flex-wrap:wrap; }
+    .graph-tools { position:absolute; top:12px; left:12px; right:12px; z-index:3; display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
     .graph-tools .btn { box-shadow:0 1px 4px var(--shadow); }
+    .zoom-controls { display:flex; gap:4px; }
+    .zoom-controls .btn { min-width:34px; min-height:32px; padding:4px 9px; font-size:16px; line-height:1; }
     .legend { position:absolute; bottom:12px; left:12px; z-index:3; max-width:360px; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:10px; color:var(--muted); box-shadow:0 1px 4px var(--shadow); }
     .detail-title { font-size:16px; font-weight:600; margin-bottom:3px; word-break:break-word; }
     .detail-sub { color:var(--muted); font-size:11px; margin-bottom:12px; }
@@ -90,8 +93,18 @@
     .selected-item { font-size:11px; padding:4px 2px; }
     .error { color:var(--danger); }
     .loading { color:var(--muted); font-size:12px; }
-    @media (max-width:1150px) { .layout { grid-template-columns:280px 1fr; grid-template-rows:minmax(500px,1fr) auto; } .right { grid-column:1 / -1; border-left:0; border-top:1px solid var(--line); max-height:42vh; } }
-    @media (max-width:760px) { .layout { display:flex; flex-direction:column; } .left,.right { max-height:none; border:0; border-bottom:1px solid var(--line); } .graph-wrap { min-height:62vh; } header { padding:0 12px; } header .jobtext { display:none; } }
+    @media (max-width:1150px) {
+      .layout { grid-template-columns:minmax(220px,.8fr) minmax(0,1.2fr); grid-template-rows:minmax(0,1fr) minmax(180px,min(42vh,360px)); }
+      .right { grid-column:1 / -1; border-left:0; border-top:1px solid var(--line); max-height:none; }
+    }
+    @media (max-width:760px) {
+      .app { height:auto; min-height:100vh; min-height:100dvh; overflow:visible; grid-template-rows:64px auto; }
+      .layout { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(55vh,65dvh) auto; height:auto; overflow:visible; }
+      .left,.right { max-height:none; min-height:0; overflow:visible; overscroll-behavior:auto; border:0; border-bottom:1px solid var(--line); }
+      .graph-wrap { min-height:55vh; min-height:65dvh; }
+      header { padding:0 12px; }
+      header .jobtext { display:none; }
+    }
       [hidden] { display: none !important; }
 </style>
 </head>
@@ -157,6 +170,10 @@
 
     <main class="graph-wrap">
       <div class="graph-tools">
+        <div class="zoom-controls" role="group" aria-label="Graph zoom controls">
+          <button class="btn small" id="zoomOutBtn" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+          <button class="btn small" id="zoomInBtn" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+        </div>
         <button class="btn small" id="fitBtn">Fit view</button>
         <button class="btn small" id="resetGraphBtn">Reset view</button>
         <button class="btn small" id="hideSelectedBtn">Hide selected</button>
@@ -557,7 +574,7 @@ function buildGraph(preserve=true){
     successBorder:'#8DB99A',
     warning:'#A16207'
   };
-  cy=cytoscape({container:document.getElementById('cy'),elements:{nodes,edges},style:[
+  cy=cytoscape({container:document.getElementById('cy'),elements:{nodes,edges},userZoomingEnabled:false,style:[
     {selector:'node',style:{'label':'data(label)','font-size':11,'font-family':'Inter, system-ui, sans-serif','color':graphColors.text,'text-wrap':'wrap','text-max-width':160,'text-background-color':graphColors.bg,'text-background-opacity':0.94,'text-background-padding':3,'background-color':graphColors.surface,'width':36,'height':36,'border-width':1.5,'border-color':graphColors.muted,'text-valign':'bottom','text-halign':'center','text-margin-y':8}},
     {selector:'node[node_type="finding"]',style:{'shape':'roundrectangle','background-color':graphColors.surface,'border-color':graphColors.muted,'color':graphColors.text,'width':58,'height':42,'font-size':10}},
     {selector:'node[node_type="indicator"]',style:{'shape':'ellipse','background-color':graphColors.accentPale,'border-color':graphColors.accentBorder,'width':30,'height':30,'color':graphColors.text,'font-size':10}},
@@ -593,6 +610,9 @@ document.getElementById('nodeTypeFilter').onchange=applyGraphFilters;
 document.getElementById('showIndicators').onchange=applyGraphFilters;
 document.getElementById('showCorrelations').onchange=applyGraphFilters;
 document.getElementById('showMemberships').onchange=applyGraphFilters;
+function zoomGraphBy(factor){if(!cy)return;const level=Math.max(cy.minZoom(),Math.min(cy.maxZoom(),cy.zoom()*factor));cy.zoom({level,renderedPosition:{x:cy.width()/2,y:cy.height()/2}});}
+document.getElementById('zoomOutBtn').onclick=()=>zoomGraphBy(1/1.2);
+document.getElementById('zoomInBtn').onclick=()=>zoomGraphBy(1.2);
 document.getElementById('fitBtn').onclick=()=>cy?.fit(cy.elements(':visible'),50);
 document.getElementById('resetGraphBtn').onclick=()=>{hiddenNodeIds.clear();persistHidden();document.getElementById('nodeTypeFilter').value='all';document.getElementById('sourceFilter').value='all';document.getElementById('findingSearch').value='';renderFindings();applyGraphFilters();cy?.fit(cy.elements(':visible'),50);};
 document.getElementById('hideSelectedBtn').onclick=hideSelected;document.getElementById('showHiddenBtn').onclick=showAllHidden;document.getElementById('selectVisible').onclick=selectVisible;document.getElementById('clearSelection').onclick=clearSelection;document.getElementById('createEntityBtn').onclick=openEntityModal;document.getElementById('saveEntityBtn').onclick=saveEntity;document.getElementById('saveEntityEditBtn').onclick=saveEntityEdit;document.getElementById('saveRelationshipBtn').onclick=saveRelationship;document.getElementById('saveRelationshipEditBtn').onclick=saveRelationshipEdit;document.getElementById('manualSearchBtn').onclick=runManualSearch;document.getElementById('manualSearch').addEventListener('keydown',e=>{if(e.key==='Enter')runManualSearch();});document.getElementById('reloadBtn').onclick=()=>loadAll(true);
