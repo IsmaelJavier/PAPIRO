@@ -1,370 +1,168 @@
-# OSINT MVP — ruta mínima verificable
+# PAPIRO — reconstrucción asistida de huellas digitales abiertas
 
-MVP construido desde cero para validar primero el flujo y el modelo de datos con una sola fuente real: GitHub.
+PAPIRO es el prototipo de una plataforma OSINT para organizar evidencias públicas, examinar coincidencias entre ellas y construir perfiles candidatos y relaciones que un investigador pueda revisar. El proyecto busca ofrecer un flujo de trabajo trazable: los resultados deben conservar su fuente y no convertirse automáticamente en afirmaciones sobre la identidad de una persona.
 
-## Flujo
+**Estado:** prototipo funcional en desarrollo. Incluye API, interfaz web, persistencia, recolección desde fuentes públicas seleccionadas, correlación determinista y un espacio de investigación con grafo. No es todavía una plataforma OSINT general ni un producto listo para producción.
 
-`POST /api/v1/ingest/name` → PostgreSQL Job → Celery/Redis → GitHub → perfil público → normalización → Finding + Indicators → correlación determinista → PostgreSQL → `GET /api/v1/jobs/{job_id}`.
+- [Read this in English](README.en.md)
+- [Читать на русском](README.ru.md)
 
-## Principios
+## Qué permite hacer
 
-- PostgreSQL es la fuente de verdad.
-- Redis solo coordina Celery.
-- No hay Elasticsearch/Neo4j/MinIO todavía.
-- No hay IA, ML ni LLM.
-- No hay búsqueda iterativa todavía.
-- Un candidato devuelto por GitHub NO se afirma automáticamente como la misma persona.
-- Cada finding conserva `raw_evidence`, fuente, URL, input, fuerza de evidencia (`evidence_strength`) y razón de coincidencia (`match_reason`).
-- Los indicadores se crean solo de campos públicos realmente devueltos por la fuente.
+- Crear una investigación y ejecutar explícitamente una búsqueda por nombre.
+- Consultar resultados de las fuentes configuradas actualmente: GitHub y Wikidata.
+- Conservar los hallazgos junto con la URL y los datos de procedencia disponibles.
+- Extraer indicadores de campos públicos devueltos por las fuentes.
+- Detectar coincidencias exactas entre indicadores normalizados de hallazgos de fuentes diferentes.
+- Revisar y evaluar correlaciones sin convertirlas automáticamente en identidades confirmadas.
+- Crear perfiles candidatos, asociarles hallazgos y definir relaciones entre perfiles.
+- Explorar hallazgos, indicadores, correlaciones, perfiles y relaciones desde la interfaz de investigación.
+- Usar cuentas con roles y permisos diferentes para acceder a investigaciones.
 
-## Arranque
+## Qué no hace todavía
+
+- No utiliza inteligencia artificial, modelos de lenguaje ni aprendizaje automático.
+- No realiza una búsqueda autónoma e iterativa hasta agotar nuevos indicadores.
+- No busca de forma universal en toda la web ni garantiza cobertura de redes sociales.
+- No demuestra que dos hallazgos correspondan a la misma persona: una coincidencia es una pista que requiere evaluación.
+- No debe tratarse como una herramienta de vigilancia, identificación definitiva ni verificación de identidad.
+- No todas las operaciones de edición del grafo están implementadas. Ocultar elementos en la vista no equivale a eliminarlos de la base de datos.
+- No se ha establecido aquí una garantía de seguridad, rendimiento o validación formal suficiente para producción.
+
+## Arquitectura actual
+
+- **API e interfaz:** FastAPI.
+- **Procesamiento asíncrono:** Celery y Redis.
+- **Persistencia principal:** PostgreSQL.
+- **Visualización del grafo:** Cytoscape.js en la interfaz web.
+- **Fuentes de búsqueda por nombre:** GitHub y Wikidata.
+- **Correlación:** determinista, basada en coincidencias exactas de indicadores normalizados entre fuentes diferentes.
+
+El flujo general es:
+
+`Investigación → búsqueda explícita → hallazgos e indicadores → correlaciones → perfiles candidatos y relaciones → evaluación del investigador`
+
+PostgreSQL conserva los datos de la aplicación; Redis coordina las tareas asíncronas. Neo4j, Elasticsearch y MinIO no forman parte del flujo activo descrito por esta configuración.
+
+## Requisitos
+
+- Git.
+- Docker y Docker Compose.
+- Acceso a Internet para descargar imágenes y consultar las fuentes públicas.
+- Opcionalmente, un token de GitHub para disponer de límites de API superiores.
+
+La configuración actual de `docker-compose.yml` usa `network_mode: host` y direcciones de loopback. Está orientada al entorno de desarrollo donde se ha preparado el proyecto; en Windows/macOS con Docker Desktop u otros despliegues puede ser necesario adaptar la red antes de arrancar. No expongas los puertos ni el servicio a redes no confiables sin revisar esa configuración.
+
+## Instalación local
+
+Clona el repositorio y entra en su directorio:
+
+```bash
+git clone https://github.com/Starv1ng/Kami-no-Eye.git
+cd Kami-no-Eye
+git switch main
+```
+
+Crea el archivo de configuración:
 
 ```bash
 cp .env.example .env
-docker compose up --build
 ```
 
-Swagger: `http://localhost:8000/docs`
+En Windows PowerShell, puedes copiarlo con `Copy-Item .env.example .env`.
 
-Crear trabajo:
+Edita `.env` y reemplaza `AUTH_SECRET_KEY` por un secreto aleatorio propio de al menos 32 caracteres. Puedes generar uno con Python:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/ingest/name \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Monalisa Octocat"}'
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Consultar:
+No publiques el archivo `.env` ni reutilices el secreto de otra instalación. `GITHUB_TOKEN` es opcional; déjalo vacío si no vas a configurar uno.
+
+Construye e inicia los servicios:
 
 ```bash
-curl http://localhost:8000/api/v1/jobs/<JOB_ID>
-curl http://localhost:8000/api/v1/jobs/<JOB_ID>/findings
+docker compose up --build -d
+docker compose ps
+docker compose logs --tail=100 api worker postgres redis
 ```
 
-## Token de GitHub
+Cuando los servicios estén activos, las direcciones locales previstas son:
 
-`GITHUB_TOKEN` es opcional. Para uso público no es obligatorio, pero autenticarse aumenta los límites de API.
+- Interfaz: http://127.0.0.1:8000/ui
+- Documentación de la API: http://127.0.0.1:8000/docs
+- Comprobación de salud: http://127.0.0.1:8000/health
 
-## Tests
+Si no arranca, revisa primero los logs y la compatibilidad de la red de Docker con tu sistema. La configuración de desarrollo incluye credenciales locales en el Compose; cámbialas y revisa la configuración antes de cualquier despliegue compartido o de producción.
 
-```bash
-docker compose run --rm api pytest -q
-```
+## Base de datos y primer administrador
 
-Los tests HTTP utilizan `MockTransport` únicamente para validar lógica determinista. La prueba E2E real debe hacerse con Docker Compose y GitHub.
+La aplicación crea las tablas correspondientes a sus modelos al arrancar, pero eso **no sustituye todas las migraciones** necesarias para una base existente o para habilitar las funciones de identidad, entidades y colaboración.
 
-## Próximo incremento
+Antes de aplicar migraciones sobre una base que contenga datos, haz una copia de seguridad y confirma qué migraciones se ejecutaron. No borres el volumen `pgdata` para resolver errores: contiene la persistencia de PostgreSQL.
 
-Siguiente incremento implementado:
+Para una base de datos nueva, revisa las migraciones y aplícalas en el orden que corresponda a tu estado de esquema. En el flujo documentado para habilitar todas las funciones actuales:
 
-- contrato común `PersonSource` para las fuentes de búsqueda por nombre;
-- nomenclatura semántica: `evidence_strength` y `match_reason`;
-- correlación determinista entre hallazgos de fuentes diferentes mediante indicadores normalizados;
-- evaluación independiente de las correlaciones (`indeterminado`, `confirmada`, `descartada`);
-- la correlación no determina automáticamente identidad.
+1. Aplica `migrations/002_correlation_and_nomenclature.sql`.
+2. Aplica `migrations/003_entities_graph.sql`.
+3. Ejecuta `docker compose exec api python -m scripts.apply_identity_migration` para la migración de identidad 004.
+4. Aplica `migrations/006_investigation_sharing.sql`.
+5. Aplica `migrations/007_entity_accounts_and_verification.sql`.
 
-### Migración
-
-Para conservar los datos existentes, ejecutar:
+Las migraciones SQL 002, 003, 006 y 007 pueden aplicarse, por ejemplo, desde la raíz del repositorio con:
 
 ```bash
 cat migrations/002_correlation_and_nomenclature.sql | docker compose exec -T postgres psql -U kami -d kami_eye
 ```
 
-La migración renombra `findings.confidence` a `findings.evidence_strength`, `findings.relevance_reason` a `findings.match_reason` y crea las tablas de correlación. No se debe eliminar el volumen de PostgreSQL.
+Repite el comando con el archivo de migración que corresponda. El método de aplicación de 004 es el comando Python indicado arriba. Si la base ya contiene datos, no ejecutes las migraciones a ciegas: revisa su contenido y el estado real del esquema antes de continuar.
 
-### Correlación
-
-Consultar las correlaciones de un trabajo:
+Crea el primer administrador **solo después de aplicar la migración de identidad**:
 
 ```bash
-curl http://localhost:8000/api/v1/jobs/<JOB_ID>/correlations
+docker compose exec -it api python -m scripts.bootstrap_superuser
 ```
 
-La correlación usa únicamente coincidencias exactas de indicadores normalizados entre fuentes diferentes. El nombre original de la consulta no se utiliza como evidencia de correlación.
+El script solicita correo y contraseña dos veces y exige una contraseña de al menos 12 caracteres. Se niega a ejecutarse si ya existe cualquier cuenta. No hay credenciales de demostración predefinidas.
 
-Evaluar una correlación:
+## Cómo probar PAPIRO
+
+1. Abre http://127.0.0.1:8000/ui e inicia sesión con una cuenta válida.
+2. Si el registro público está habilitado en la instancia, crea una cuenta de investigador. Las solicitudes de cuentas institucionales requieren aprobación administrativa.
+3. Crea una investigación desde la interfaz.
+4. Inicia manualmente una búsqueda por nombre. **Crear una investigación no inicia por sí solo la recolección.**
+5. Revisa los hallazgos y sus fuentes; examina los indicadores y las correlaciones propuestas.
+6. Crea un perfil candidato, asocia hallazgos y define relaciones cuando exista una base que justifique examinarlas.
+7. Evalúa las correlaciones y relaciones como confirmadas, descartadas o indeterminadas según las opciones disponibles. Documenta la razón de la evaluación.
+8. Abre el grafo desde el espacio de investigación y comprueba que puedes seguir los elementos hasta sus evidencias de origen.
+
+Usa únicamente datos públicos y trata los resultados como hipótesis de investigación. Una coincidencia de nombre, alias o indicador no basta para atribuir una identidad.
+
+## Pruebas automatizadas
+
+Desde la raíz del proyecto:
 
 ```bash
-curl -X PATCH http://localhost:8000/api/v1/correlations/<CORRELATION_ID>/assessment \
-  -H "Content-Type: application/json" \
-  -d '{"assessment":"confirmada","assessment_note":"Existe evidencia independiente que justifica la asociación."}'
+docker compose run --rm api pytest -q
 ```
 
+El resultado depende de la versión del código, la configuración y el entorno. No se afirma que toda la suite pase en el estado actual: ejecuta las pruebas antes de aceptar cambios o desplegar y revisa cada fallo. Las pruebas que simulan respuestas HTTP verifican lógica de forma controlada; no sustituyen una prueba de extremo a extremo contra servicios reales.
 
-## Wikidata source
+## Seguridad y uso responsable
 
-The person-name ingestion now queries two independent public sources:
+- Configura un secreto fuerte y único en `.env`; no lo subas al repositorio.
+- No expongas una instancia de desarrollo directamente a Internet.
+- Haz copias de seguridad antes de migrar o modificar la base de datos.
+- Conserva la procedencia de la evidencia y documenta las decisiones del investigador.
+- Limita la recolección a información pública y a usos legales y autorizados.
+- Antes de producción, revisa la autenticación, la gestión de sesiones, la limitación de intentos, la configuración de red, los secretos, los permisos y la política de retención de datos.
 
-- GitHub (`github_person_search`)
-- Wikidata (`wikidata_person_search`)
+## Próximas líneas de trabajo
 
-The Wikidata module uses the public Wikibase Action API (`wbsearchentities` followed by `wbgetentities`) and stores each returned entity as a canonical finding. It exposes the Wikidata Q-ID and available English/Spanish Wikipedia sitelinks as indicators. As with GitHub, evidence strength is not an identity probability; identity and relevance remain investigator assessments.
+Entre las áreas pendientes se encuentran ampliar y evaluar las fuentes de datos, mejorar la edición persistente del grafo, facilitar la revisión de evidencias y correlaciones, completar las pruebas de autorización y de interfaz, reforzar la instalación en distintos sistemas y validar formalmente el método y el comportamiento de la plataforma.
 
-## Entidades, perfiles y grafo de investigación
+Estas líneas describen trabajo futuro, no funcionalidades que deban considerarse ya implementadas.
 
-El tercer incremento añade una capa de reconstrucción gestionada por el investigador. Una `Entity` representa un candidato de perfil dentro de un trabajo; no equivale automáticamente a una persona real ni resuelve identidad.
+## Licencia
 
-Flujo:
-
-`Finding → Indicator → Correlation → Entity → Relationship → Graph`
-
-### Principios de la capa de entidad
-
-- Una entidad se crea explícitamente como contenedor de investigación (`person_candidate`).
-- Los findings se pueden asociar a una entidad con un rol descriptivo.
-- Las relaciones entre entidades son independientes de la identidad y comienzan en `indeterminado`.
-- Una relación puede documentar la correlación que la sustenta mediante `correlation_id` y findings.
-- La API mantiene trazabilidad desde el grafo hacia findings, indicadores y fuentes.
-- No se fusionan automáticamente personas ni se emiten conclusiones de identidad.
-
-### API de exploración
-
-Obtener la proyección completa del grafo:
-
-```bash
-curl http://localhost:8000/api/v1/jobs/<JOB_ID>/graph
-```
-
-Abrir la visualización interactiva en el navegador:
-
-```text
-http://localhost:8000/ui/graph/<JOB_ID>
-```
-
-Crear una entidad candidata:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/jobs/<JOB_ID>/entities \
-  -H "Content-Type: application/json" \
-  -d '{"label":"Candidato 1","description":"Agrupación para evaluación del investigador"}'
-```
-
-Asociar un finding:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/entities/<ENTITY_ID>/findings \
-  -H "Content-Type: application/json" \
-  -d '{"finding_id":"<FINDING_ID>","role":"perfil"}'
-```
-
-Crear una relación entre entidades:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/jobs/<JOB_ID>/relationships \
-  -H "Content-Type: application/json" \
-  -d '{"entity_a_id":"<ENTITY_A>","entity_b_id":"<ENTITY_B>","relationship_type":"associated_with","basis":"shared_username:johnsmith","correlation_id":"<CORRELATION_ID>"}'
-```
-
-Evaluar una relación:
-
-```bash
-curl -X PATCH http://localhost:8000/api/v1/relationships/<RELATIONSHIP_ID>/assessment \
-  -H "Content-Type: application/json" \
-  -d '{"assessment":"confirmada","assessment_note":"La relación fue revisada por el investigador."}'
-```
-
-### Migración 003
-
-Con PostgreSQL activo y después de ejecutar la migración 002:
-
-```bash
-cat migrations/003_entities_graph.sql | docker compose exec -T postgres psql -U kami -d kami_eye
-```
-
-No se debe eliminar el volumen de PostgreSQL.
-
-## Visualización del grafo en GitHub Codespaces
-
-La API expone una interfaz web en:
-
-`/ui/graph/{job_id}`
-
-En Codespaces, abre el panel **Ports**, localiza el puerto `8000` y pulsa el icono de abrir en navegador (globe). Después añade `/ui/graph/<JOB_ID>` a la dirección, por ejemplo:
-
-`https://<codespace>-8000.app.github.dev/ui/graph/ac1d9bb2-86c1-4259-a370-1b8d4d1fc673`
-
-La interfaz consulta automáticamente `/api/v1/jobs/{job_id}/graph` y permite filtrar por tipo de nodo y fuente, buscar etiquetas y seleccionar nodos/aristas para inspeccionar la evidencia.
-
-## Espacio de investigación (UI)
-
-La ruta `/ui/job/<JOB_ID>` (y la ruta anterior `/ui/graph/<JOB_ID>`) sirve ahora como espacio de trabajo del investigador. El objetivo de esta iteración es permitir la reconstrucción asistida sin utilizar la consola:
-
-1. Revisar los findings recolectados y sus evaluaciones.
-2. Seleccionar uno o varios findings como evidencia.
-3. Crear una entidad/perfil candidato y asociarle esa evidencia en una sola operación.
-4. Abrir el perfil para consultar findings, indicadores y relaciones.
-5. Seleccionar dos entidades y crear una relación desde la interfaz.
-6. Confirmar, descartar o mantener indeterminada una relación.
-7. Confirmar, descartar o mantener indeterminadas las correlaciones y los findings.
-8. Navegar entre el grafo y el detalle de cada elemento, conservando la trazabilidad hacia la fuente.
-
-La UI no convierte una correlación en una identidad ni una entidad en una persona confirmada. Las agrupaciones y relaciones son objetos de investigación que requieren evaluación del investigador.
-
-### Migración de esta iteración
-
-Antes de utilizar entidades y relaciones en una base existente, ejecutar una vez:
-
-```bash
-cat migrations/003_entities_graph.sql | docker compose exec -T postgres psql -U kami -d kami_eye
-```
-
-Luego reiniciar API y worker si es necesario:
-
-```bash
-docker compose restart api worker
-```
-
-En GitHub Codespaces, abrir el puerto `8000` desde **Ports → Open in Browser** y añadir:
-
-```text
-/ui/job/<JOB_ID>
-```
-
-Por ejemplo:
-
-```text
-https://<codespace>-8000.app.github.dev/ui/job/ac1d9bb2-86c1-4259-a370-1b8d4d1fc673
-```
-
-## Correcciones y mejoras del espacio de investigación
-
-La interfaz `/ui/job/{JOB_ID}` incorpora ahora:
-
-- Persistencia local de la posición de los nodos del grafo al arrastrarlos, evitando que una evaluación de finding reorganice el grafo de forma aleatoria.
-- Ocultación/recuperación de nodos sin eliminar evidencia de la base de datos.
-- Controles para mostrar u ocultar indicadores, correlaciones y aristas de pertenencia.
-- Edición del nombre y descripción de entidades candidatas.
-- Asociación posterior de varios findings seleccionados a una entidad existente.
-- Edición del tipo y base de una relación.
-- Nueva búsqueda de persona contra las fuentes configuradas mediante `POST /api/v1/jobs/{job_id}/search/name`; los findings nuevos se incorporan a la investigación y, cuando corresponde, se recalculan las correlaciones deterministas.
-
-Las posiciones y nodos ocultos son preferencias locales del navegador en esta iteración; no modifican la evidencia ni eliminan datos. La persistencia server-side de la vista podrá añadirse posteriormente.
-
-
-## Identidad, entidades y autorización
-
-La rama `feature/identity-authorization` incorpora autenticación y autorización por recurso, colaboración mediante copias independientes y gestión de entidades institucionales. No modifica la lógica de recolección OSINT, normalización, correlación ni reconstrucción del grafo.
-
-### Política de acceso
-
-- Las investigaciones personales tienen un investigador responsable.
-- Una investigación organizativa tiene un responsable y un `organization_id`.
-- Los investigadores solo consultan y modifican sus propias investigaciones, salvo una copia que les haya sido compartida explícitamente.
-- Las cuentas con rol global `entity` pueden consultar las investigaciones de su organización y administrar las membresías de investigadores, pero no modificar ni eliminar el contenido de las investigaciones.
-- Un investigador no obtiene acceso a los expedientes de sus compañeros solo por pertenecer a la misma organización.
-- `superuser` conserva el acceso administrativo global.
-- El registro público solo permite `investigator` y `user`. Una cuenta no puede asignarse a sí misma el rol `entity`.
-
-### Configuración y migraciones
-
-1. Copia `.env.example` a `.env` y establece `AUTH_SECRET_KEY` con un secreto aleatorio de al menos 32 caracteres.
-2. Haz una copia de seguridad de PostgreSQL y confirma que las migraciones 002 y 003 están aplicadas.
-3. Aplica la migración 004 con `docker compose exec api python -m scripts.apply_identity_migration`.
-4. Aplica las migraciones de colaboración y entidades, en este orden:
-   ```bash
-   cat migrations/006_investigation_sharing.sql | docker compose exec -T postgres psql -U kami -d kami_eye
-   cat migrations/007_entity_accounts_and_verification.sql | docker compose exec -T postgres psql -U kami -d kami_eye
-   ```
-5. Crea el primer administrador de forma interactiva: `docker compose exec -it api python -m scripts.bootstrap_superuser`.
-6. Abre `http://127.0.0.1:8000/ui`. Las cuentas de investigador y público pueden registrarse; las cuentas de entidad y administración deben crearse desde el panel administrativo.
-
-Las migraciones 004, 006 y 007 son idempotentes y no requieren eliminar volúmenes. Los trabajos históricos sin propietario no se asignan automáticamente: deben auditarse y reasignarse explícitamente.
-
-### Alta de una entidad institucional
-
-1. En el panel administrativo, crea una cuenta con rol **Entidad verificada**.
-2. Verifica la identidad institucional fuera de la plataforma.
-3. Registra la entidad usando su identificador único y el correo de esa cuenta. El sistema guarda el correo de contacto, la fecha de verificación y el administrador responsable.
-4. Inicia sesión con la cuenta de entidad para consultar las investigaciones de la organización y administrar las membresías.
-
-La verificación institucional es una operación administrativa; no implica verificación automática del dominio ni envío de un correo de confirmación. No se debe conceder el rol de entidad sin comprobar la identidad por un canal fiable.
-
-Los responsables de entidad pueden añadir cuentas existentes de investigador y retirar sus membresías. No pueden convertir otras cuentas en entidades ni eliminar al último responsable activo. Para crear una investigación organizativa, el investigador selecciona la organización a la que pertenece en el formulario de nueva investigación.
-
-### Colaboración entre investigadores
-
-Compartir una investigación crea una copia independiente con permiso de lectura, lectura y comentarios, o edición. Los cambios de la copia no alteran el original hasta que el responsable incorpora la copia mediante el proceso de merge; si el original cambió desde la creación de la copia, el merge se rechaza para evitar sobrescrituras.
-
-### Importante antes de producción
-
-- La UI del grafo almacena el bearer token en `localStorage`; antes de producción conviene valorar una cookie `HttpOnly` y añadir protección contra fuerza bruta.
-- CI ejecuta las pruebas de Python, comprobaciones de sintaxis JavaScript y una prueba de humo de migraciones sobre PostgreSQL, incluidas segundas ejecuciones para comprobar idempotencia. Antes de desplegar, prueba las migraciones sobre una copia de la base real.
-- El historial Git puede conservar versiones antiguas de `.env`. Si contuvo credenciales reales, rótalas y sanea el historial antes de compartir la rama.
-
-
-
-## Colaboración de investigaciones: revisión antes de integrar
-
-La rama `feature/collaboration-pull-request-flow` añade un flujo de propuesta tipo pull request:
-
-1. Compartir crea una copia independiente para el investigador colaborador.
-2. El propietario original revisa la diferencia de esa copia desde `Pull / Merge`.
-3. El propietario marca como revisada una versión concreta; cualquier edición posterior invalida esa revisión.
-4. La API integra cambios no conflictivos de ambas partes mediante una fusión de tres vías; rechaza los conflictos concurrentes para que puedan revisarse sin sobrescribir datos.
-5. El hilo de comentarios se consulta por `share_id`, por lo que tanto el propietario original como el colaborador pueden ver los comentarios permitidos por su rol.
-
-Antes de desplegar esta rama, aplicar la migración aditiva `migrations/008_investigation_share_review.sql` sobre la base de datos existente. Esta migración solo agrega dos columnas a `investigation_shares`; no elimina investigaciones, copias ni comentarios.
-
-
-## Ideas e implementaciones recuperadas de ramas históricas
-
-Esta sección conserva el contexto útil de ramas distintas de `main`. No implica que su código esté integrado ni validado. Antes de reutilizar una idea, revisar la implementación actual de `main` y adaptar solo el cambio necesario. No restaurar ramas completas por encima de `main`.
-
-### Pendiente de evaluar: separar los recursos de la interfaz
-
-**Procedencia:** `refactor/separate-ui-assets` (PR #8).
-
-- Extraer el CSS y JavaScript incrustados de `index.html`, `workspace.html` y `graph.html` a archivos independientes: `index.css/js`, `workspace.css/js` y `graph.css/js`.
-- Servirlos bajo `/ui/assets/` y cargar los scripts con `defer`.
-- Añadir pruebas para comprobar que las páginas enlazan los recursos externos y que estos se sirven correctamente.
-- Mantener el comportamiento actual: en particular, abrir el espacio de trabajo no debe iniciar recolecciones automáticamente; la búsqueda debe seguir siendo una acción explícita del investigador.
-- Antes de integrar, revisar las diferencias contra `main`, ejecutar las pruebas de UI y comprobar acceso, registro, dashboard, grafo, edición, colaboración y autorización. La rama no debe considerarse validada solo porque las comprobaciones estáticas pasen.
-
-### Ideas de interfaz PAPIRO para reutilizar selectivamente
-
-**Procedencia:** `ui/papiro-redesign`, `feature/papiro-scroll-zoom-layout` y `fix/papiro-scroll-zoom-layout`.
-
-- Mantener tokens visuales semánticos compartidos para colores, tipografía, bordes, superficies y estados, evitando valores visuales divergentes entre páginas.
-- Mejorar el comportamiento del grafo: desplazamiento independiente de paneles, controles de zoom visibles y usables, diseño adaptable a pantallas estrechas y etiquetas legibles.
-- Mantener la inspección de una entidad separada de la selección explícita de extremos para crear una relación; abrir un perfil no debe seleccionar nodos de relación implícitamente.
-- Revisar navegación móvil accesible, estados `aria-expanded`, foco, contraste y respeto a `prefers-reduced-motion`.
-- Corregir y probar de forma aislada los selectores de registro/administración y la inicialización de colores de Cytoscape.
-
-La rama de rediseño diverge históricamente de `main`; estos puntos son una lista de ideas y correcciones a contrastar, no una instrucción para reemplazar los archivos actuales por los de aquella rama.
-
-### Referencias de recuperación antes de borrar ramas
-
-Últimos SHA consultados en GitHub. Si después de borrar una rama se necesita recuperar algo, estos commits permiten localizar el código histórico mientras GitHub conserve los objetos:
-
-| Rama | Último SHA consultado | Motivo para conservar la referencia |
-|---|---|---|
-| `archive/main-before-canonical-2026-10-12` | `249ebc2eb0ca3714ecf9f3bec156683fa2a2ef49` | Histórico de organización de acceso/dashboard |
-| `feature/collaboration-pull-request-flow` | `9b4f960a6e0329db667774372561c3d7c9d74017` | Revisión vinculada a snapshot y merge de tres vías |
-| `feature/entity-onboarding-membership` | `dd9f1f7bce4166f30f0d92e4823243b8a566170c` | Onboarding de entidades y refinamientos de UI |
-| `feature/identity-authorization` | `7863bc024263f91850cd00063269180e35763c3e` | Autorización y consistencia al restaurar snapshots |
-| `feature/papiro-scroll-zoom-layout` | `2cb57577d69bb65d2dad6d83e8a79dfdeb3f39dd` | Selección de relaciones y ajustes de layout |
-| `fix/papiro-scroll-zoom-layout` | `6b5c7cd82e3c89eda4fac47c4f1e2ab4cfec3ec1` | Pruebas de regresión para scroll/zoom |
-| `fix/refresh-session-after-snapshot-restore` | `2ea6441b36cbb03619b95f964dde05e3c9c887ac` | Estado ORM tras restauración de snapshot |
-| `refactor/separate-ui-assets` | `e9c5d214d2d8c2dfd07c8c62b6232bd2de2bc7c0` | Separación CSS/JS; PR #8 sigue abierto |
-| `ui/hide-investigation-sharing` | `038cfc1c0f273689bb55aa8a6b0ca3a73efc1ca4` | Ocultación histórica de controles de colaboración |
-| `ui/papiro-redesign` | `6350f8314c628d6789a72833fa785ce6d57ee86e` | Rediseño PAPIRO y mejoras de navegación/estilo |
-
-Estos SHA son referencias históricas, no garantía de que la rama esté integrada ni de que sus pruebas pasen. Antes de borrar, cerrar o resolver cualquier pull request abierto y verificar que `main` siga siendo la rama predeterminada.
-
-### Funcionalidades cuya historia ya está incorporada en `main`
-
-Las siguientes ramas no muestran commits exclusivos respecto a `main` en la comparación consultada; sus nombres se conservan aquí como contexto, no como trabajo pendiente:
-
-- `feature/identity-authorization`: autenticación, roles, autorización por recurso y separación de acceso entre investigador, entidad institucional y administrador.
-- `feature/entity-onboarding-membership`: alta y verificación administrativa de entidades, gestión de membresías y selección de organización para investigaciones.
-- `feature/collaboration-pull-request-flow`: revisión explícita de propuestas de colaboración, diferencias antes/después, aprobación ligada a una versión concreta, fusión de tres vías y tratamiento explícito de conflictos concurrentes.
-- `fix/refresh-session-after-snapshot-restore`: consistencia del estado ORM después de restaurar instantáneas y comprobaciones de persistencia.
-- `ui/hide-investigation-sharing`: cambios históricos para ocultar controles de colaboración en la interfaz.
-- `archive/main-before-canonical-2026-10-12`: referencia histórica de la reorganización de la página de acceso y el dashboard. No usarla como base de desarrollo.
-
-Antes de reimplementar cualquiera de estas capacidades, comprobar primero su estado y sus pruebas en `main`; no duplicar una funcionalidad ya existente.
-
-### Criterio de mantenimiento de ramas
-
-`main` es la referencia de desarrollo. Las ramas históricas no deben usarse como base de despliegue. Antes de eliminar una rama, verificar que su trabajo exclusivo esté documentado aquí o integrado en `main`, revisar si tiene un pull request abierto y conservar el SHA del último commit cuando pueda ser útil para recuperar una implementación.
+Consulta el repositorio para conocer el estado de la licencia. Este README no concede por sí mismo derechos de redistribución o uso adicionales.
