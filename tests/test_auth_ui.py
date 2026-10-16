@@ -66,6 +66,9 @@ def test_investigation_ui_has_autosave_exit_and_logout_confirmation():
         assert "papiro:hidden:" in script
         assert "kami:hidden:" in script
         assert "papiro:positions:" in script
+        assert "kami:positions:" in script
+        assert "papiro:session-baseline:" in script
+        assert "kami:session-baseline:" in script
 
 
 def test_papiro_brand_assets_are_served():
