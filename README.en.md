@@ -1,8 +1,8 @@
 # PAPIRO
 
-**PAPIRO is an OSINT platform under development for investigating people using publicly available information.** Its long-term goal is to automate as much of the process as possible: collect information from multiple sources, discover and correlate indicators, resolve candidate identities, and expand investigations iteratively as new data emerges—even when working with large volumes of information.
+**PAPIRO is an OSINT platform under development for investigating people using publicly available information.** Its long-term goal is to automate as much of the process as possible: collect information from multiple sources, discover and correlate indicators, resolve candidate identities, and expand investigations iteratively as new data emerges, including when working with large volumes of information.
 
-This describes the intended direction, not the level of automation available today. The current version is an initial functional foundation for running limited searches, organizing findings, and examining correlations. Significant work remains before it can support automated, iterative, and scalable investigations.
+This is the project's intended direction, not the level of automation available today. PAPIRO currently provides an initial functional foundation for running limited searches, organizing findings, and examining correlations. Significant work remains before it can support automated, iterative, and scalable investigations.
 
 - [Español](README.md) · [Русский](README.ru.md)
 
@@ -13,16 +13,16 @@ This describes the intended direction, not the level of automation available tod
 - Review findings with their URLs, provenance, and indicators.
 - Identify correlations through exact matches between normalized indicators.
 - Create candidate profiles, associate findings, and explore relationships in a graph.
-- Use authenticated investigator accounts.
+- Manage access through authenticated accounts.
 
-## Current limitations
+## Current limitations and development priorities
 
 - Source coverage is limited, and searches must be started manually.
 - Correlation relies on deterministic rules and exact matches; it is not yet a complete identity-resolution mechanism.
 - Iteratively expanding searches from new findings and analyzing data at scale remain future work.
 - Persistent editing and deletion of graph elements need further work.
-- The platform does not use AI/ML and still needs additional testing and formal validation.
-- **It is not production-ready** and should not be exposed to untrusted networks without a security review.
+- The platform does not use AI/ML and needs additional testing and formal validation.
+- Reducing these limitations, refactoring the code, and strengthening security are priorities.
 
 ## Installation
 
@@ -60,26 +60,9 @@ The current configuration uses `network_mode: host`; some operating systems or D
 2. Sign in and create an investigation.
 3. Manually start a name search.
 4. Review findings, sources, indicators, and correlations.
-5. If useful, organize findings into candidate profiles and explore graph relationships.
+5. Organize findings into candidate profiles and explore graph relationships when needed.
 
-To create a superuser account, run the following command **before registering any other account**:
+## User types
 
-```bash
-docker compose exec -it api python -m scripts.bootstrap_superuser
-```
-
-The script asks for the email and password twice and requires a password of at least 12 characters. It only works when no account exists yet.
-
-## Tests
-
-```bash
-docker compose run --rm api pytest -q
-```
-
-Run the tests in your own environment; this README does not guarantee that all tests pass in every version.
-
-## Responsible use
-
-Investigate only with a lawful basis and respect privacy and source terms. Preserve information provenance and verify results: a match, candidate profile, or graph relationship is not, by itself, a confirmed identification.
-
-If you use a database from an older version, back it up and review the schema and migration instructions before applying changes. Do not delete the Docker `pgdata` volume.
+- **Investigator:** can conduct private investigations or investigations for an entity they belong to.
+- **Entity:** can manage multiple investigators.
