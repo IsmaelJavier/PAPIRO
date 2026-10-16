@@ -31,7 +31,7 @@ def test_workspace_has_own_dashboard_and_optional_investigation_creation():
         assert 'id="investigationName"' in response.text
         assert 'id="investigationNotes"' in response.text
         assert "request('/investigations'" in client.get("/ui/assets/workspace.js").text
-        assert "request('/ingest/name'" not in response.text
+        assert "request('/ingest/name'" not in client.get("/ui/assets/workspace.js").text
 
 
 def test_investigation_ui_has_autosave_exit_and_logout_confirmation():
