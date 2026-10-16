@@ -13,6 +13,7 @@ function readMigratedStorage(key, legacyKey) {
 }
 let hiddenNodeIds = new Set(JSON.parse(readMigratedStorage(`papiro:hidden:${jobId}`, `kami:hidden:${jobId}`) || '[]'));
 const positionKey = `papiro:positions:${jobId}`;
+readMigratedStorage(positionKey, `kami:positions:${jobId}`);
 let editingEntityId = null, editingRelationshipId = null;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const labelMap = { shared_username:'shared username', shared_email:'shared email', shared_phone:'shared phone number', shared_url:'URL compartida', shared_domain:'shared domain', shared_organization:'shared organization', shared_location:'shared location' };
