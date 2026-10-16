@@ -63,4 +63,4 @@ The current configuration uses `network_mode: host`; some operating systems or D
 - **Investigator:** can conduct private investigations or investigations for an entity they belong to.
 - **Entity:** can manage multiple investigators.
 
-Test-account details are documented in the Spanish README. These accounts are for development only; change their passwords before deploying the application and never reuse them in production.
+Test-account details are documented in the Spanish README.
