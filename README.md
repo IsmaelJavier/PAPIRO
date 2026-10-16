@@ -1,168 +1,75 @@
-# PAPIRO — reconstrucción asistida de huellas digitales abiertas
+# PAPIRO
 
-PAPIRO es el prototipo de una plataforma OSINT orientada a la investigación de personas para organizar evidencias públicas, examinar coincidencias entre ellas y construir perfiles candidatos y relaciones que un investigador pueda revisar. El proyecto busca ofrecer un flujo de trabajo trazable: los resultados deben conservar su fuente y no convertirse automáticamente en afirmaciones sobre la identidad de una persona.
+PAPIRO es un prototipo OSINT para reunir información pública, revisar coincidencias y organizar hallazgos en perfiles candidatos y un grafo de investigación. **Las coincidencias son pistas, no una confirmación de identidad.**
 
-**Estado:** prototipo funcional en desarrollo. Incluye API, interfaz web, persistencia, recolección desde fuentes públicas seleccionadas, correlación determinista y un espacio de investigación con grafo. No es todavía una plataforma OSINT general ni un producto listo para producción.
+- [English](README.en.md) · [Русский](README.ru.md)
 
-- [Read this in English](README.en.md)
-- [Читать на русском](README.ru.md)
+## Qué está implementado
 
-## Qué permite hacer
+- Interfaz web y API con autenticación y roles.
+- Búsqueda por nombre en **GitHub y Wikidata**.
+- Hallazgos con fuente y URL, e indicadores extraídos de los datos públicos.
+- Correlación determinista por coincidencias exactas entre indicadores normalizados.
+- Creación de perfiles candidatos, asociación de hallazgos y relaciones.
+- Espacio de investigación para revisar evidencias y explorar el grafo.
 
-- Crear una investigación y ejecutar explícitamente una búsqueda por nombre.
-- Consultar resultados de las fuentes configuradas actualmente: GitHub y Wikidata.
-- Conservar los hallazgos junto con la URL y los datos de procedencia disponibles.
-- Extraer indicadores de campos públicos devueltos por las fuentes.
-- Detectar coincidencias exactas entre indicadores normalizados de hallazgos de fuentes diferentes.
-- Revisar y evaluar correlaciones sin convertirlas automáticamente en identidades confirmadas.
-- Crear perfiles candidatos, asociarles hallazgos y definir relaciones entre perfiles.
-- Explorar hallazgos, indicadores, correlaciones, perfiles y relaciones desde la interfaz de investigación.
-- Usar cuentas con roles y permisos diferentes para acceder a investigaciones.
+## Instalación
 
-## Qué no hace todavía
-
-- No utiliza inteligencia artificial, modelos de lenguaje ni aprendizaje automático.
-- No realiza una búsqueda autónoma e iterativa hasta agotar nuevos indicadores.
-- No busca de forma universal en toda la web ni garantiza cobertura de redes sociales.
-- No demuestra que dos hallazgos correspondan a la misma persona: una coincidencia es una pista que requiere evaluación.
-- No debe tratarse como una herramienta de vigilancia, identificación definitiva ni verificación de identidad.
-- No todas las operaciones de edición del grafo están implementadas. Ocultar elementos en la vista no equivale a eliminarlos de la base de datos.
-- No se ha establecido aquí una garantía de seguridad, rendimiento o validación formal suficiente para producción.
-
-## Arquitectura actual
-
-- **API e interfaz:** FastAPI.
-- **Procesamiento asíncrono:** Celery y Redis.
-- **Persistencia principal:** PostgreSQL.
-- **Visualización del grafo:** Cytoscape.js en la interfaz web.
-- **Fuentes de búsqueda por nombre:** GitHub y Wikidata.
-- **Correlación:** determinista, basada en coincidencias exactas de indicadores normalizados entre fuentes diferentes.
-
-El flujo general es:
-
-`Investigación → búsqueda explícita → hallazgos e indicadores → correlaciones → perfiles candidatos y relaciones → evaluación del investigador`
-
-PostgreSQL conserva los datos de la aplicación; Redis coordina las tareas asíncronas. Neo4j, Elasticsearch y MinIO no forman parte del flujo activo descrito por esta configuración.
-
-## Requisitos
-
-- Git.
-- Docker y Docker Compose.
-- Acceso a Internet para descargar imágenes y consultar las fuentes públicas.
-- Opcionalmente, un token de GitHub para disponer de límites de API superiores.
-
-La configuración actual de `docker-compose.yml` usa `network_mode: host` y direcciones de loopback. Está orientada al entorno de desarrollo donde se ha preparado el proyecto; en Windows/macOS con Docker Desktop u otros despliegues puede ser necesario adaptar la red antes de arrancar. No expongas los puertos ni el servicio a redes no confiables sin revisar esa configuración.
-
-## Instalación local
-
-Clona el repositorio y entra en su directorio:
+Requisitos: Git, Docker y Docker Compose. La configuración de Docker usa `network_mode: host`; en Docker Desktop o sistemas distintos puede necesitar ajustes de red.
 
 ```bash
 git clone https://github.com/Starv1ng/Kami-no-Eye.git
 cd Kami-no-Eye
 git switch main
-```
-
-Crea el archivo de configuración:
-
-```bash
 cp .env.example .env
 ```
 
-En Windows PowerShell, puedes copiarlo con `Copy-Item .env.example .env`.
-
-Edita `.env` y reemplaza `AUTH_SECRET_KEY` por un secreto aleatorio propio de al menos 32 caracteres. Puedes generar uno con Python:
+Edita `.env` y sustituye `AUTH_SECRET_KEY` por un secreto aleatorio propio de al menos 32 caracteres. Puedes generarlo con:
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-No publiques el archivo `.env` ni reutilices el secreto de otra instalación. `GITHUB_TOKEN` es opcional; déjalo vacío si no vas a configurar uno.
-
-Construye e inicia los servicios:
+Después inicia los servicios:
 
 ```bash
 docker compose up --build -d
 docker compose ps
-docker compose logs --tail=100 api worker postgres redis
 ```
 
-Cuando los servicios estén activos, las direcciones locales previstas son:
+Abre la aplicación en [http://127.0.0.1:8000/ui](http://127.0.0.1:8000/ui). La API está documentada en [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
-- Interfaz: http://127.0.0.1:8000/ui
-- Documentación de la API: http://127.0.0.1:8000/docs
-- Comprobación de salud: http://127.0.0.1:8000/health
+**Base de datos:** antes de usar una instalación nueva con todas las funciones de identidad y roles, revisa y aplica las migraciones de `migrations/` (002, 003, 004, 006 y 007, en ese orden; la 004 se aplica con `docker compose exec api python -m scripts.apply_identity_migration`). Haz copia de seguridad antes de migrar una base existente. No borres el volumen `pgdata`.
 
-Si no arranca, revisa primero los logs y la compatibilidad de la red de Docker con tu sistema. La configuración de desarrollo incluye credenciales locales en el Compose; cámbialas y revisa la configuración antes de cualquier despliegue compartido o de producción.
-
-## Base de datos y primer administrador
-
-La aplicación crea las tablas correspondientes a sus modelos al arrancar, pero eso **no sustituye todas las migraciones** necesarias para una base existente o para habilitar las funciones de identidad, entidades y colaboración.
-
-Antes de aplicar migraciones sobre una base que contenga datos, haz una copia de seguridad y confirma qué migraciones se ejecutaron. No borres el volumen `pgdata` para resolver errores: contiene la persistencia de PostgreSQL.
-
-Para una base de datos nueva, revisa las migraciones y aplícalas en el orden que corresponda a tu estado de esquema. En el flujo documentado para habilitar todas las funciones actuales:
-
-1. Aplica `migrations/002_correlation_and_nomenclature.sql`.
-2. Aplica `migrations/003_entities_graph.sql`.
-3. Ejecuta `docker compose exec api python -m scripts.apply_identity_migration` para la migración de identidad 004.
-4. Aplica `migrations/006_investigation_sharing.sql`.
-5. Aplica `migrations/007_entity_accounts_and_verification.sql`.
-
-Las migraciones SQL 002, 003, 006 y 007 pueden aplicarse, por ejemplo, desde la raíz del repositorio con:
-
-```bash
-cat migrations/002_correlation_and_nomenclature.sql | docker compose exec -T postgres psql -U kami -d kami_eye
-```
-
-Repite el comando con el archivo de migración que corresponda. El método de aplicación de 004 es el comando Python indicado arriba. Si la base ya contiene datos, no ejecutes las migraciones a ciegas: revisa su contenido y el estado real del esquema antes de continuar.
-
-Crea el primer administrador **solo después de aplicar la migración de identidad**:
+Tras aplicar la migración 004, crea el primer administrador:
 
 ```bash
 docker compose exec -it api python -m scripts.bootstrap_superuser
 ```
 
-El script solicita correo y contraseña dos veces y exige una contraseña de al menos 12 caracteres. Se niega a ejecutarse si ya existe cualquier cuenta. No hay credenciales de demostración predefinidas.
+El asistente solicita correo y contraseña (mínimo 12 caracteres). Solo funciona si aún no existe ninguna cuenta.
 
-## Cómo probar PAPIRO
+## Cómo probarlo
 
-1. Abre http://127.0.0.1:8000/ui e inicia sesión con una cuenta válida.
-2. Si el registro público está habilitado en la instancia, crea una cuenta de investigador. Las solicitudes de cuentas institucionales requieren aprobación administrativa.
-3. Crea una investigación desde la interfaz.
-4. Inicia manualmente una búsqueda por nombre. **Crear una investigación no inicia por sí solo la recolección.**
-5. Revisa los hallazgos y sus fuentes; examina los indicadores y las correlaciones propuestas.
-6. Crea un perfil candidato, asocia hallazgos y define relaciones cuando exista una base que justifique examinarlas.
-7. Evalúa las correlaciones y relaciones como confirmadas, descartadas o indeterminadas según las opciones disponibles. Documenta la razón de la evaluación.
-8. Abre el grafo desde el espacio de investigación y comprueba que puedes seguir los elementos hasta sus evidencias de origen.
+1. Inicia sesión en la interfaz.
+2. Crea una investigación.
+3. **Ejecuta manualmente** una búsqueda por nombre; crear una investigación no inicia la búsqueda.
+4. Revisa hallazgos, fuentes, indicadores y correlaciones.
+5. Crea perfiles candidatos, asocia evidencias y examina las relaciones en el grafo.
+6. Evalúa las coincidencias con criterio: no prueban por sí solas que sea la misma persona.
 
-Usa únicamente datos públicos y trata los resultados como hipótesis de investigación. Una coincidencia de nombre, alias o indicador no basta para atribuir una identidad.
-
-## Pruebas automatizadas
-
-Desde la raíz del proyecto:
+Para ejecutar las pruebas automatizadas:
 
 ```bash
 docker compose run --rm api pytest -q
 ```
 
-El resultado depende de la versión del código, la configuración y el entorno. No se afirma que toda la suite pase en el estado actual: ejecuta las pruebas antes de aceptar cambios o desplegar y revisa cada fallo. Las pruebas que simulan respuestas HTTP verifican lógica de forma controlada; no sustituyen una prueba de extremo a extremo contra servicios reales.
+## Líneas futuras
 
-## Seguridad y uso responsable
+- Búsqueda iterativa que aproveche nuevos indicadores.
+- Más fuentes y mejor cobertura.
+- Edición y persistencia más completas del grafo.
+- Pruebas adicionales de interfaz, autorización e instalación.
+- Validación formal del método y evaluación de la plataforma.
 
-- Configura un secreto fuerte y único en `.env`; no lo subas al repositorio.
-- No expongas una instancia de desarrollo directamente a Internet.
-- Haz copias de seguridad antes de migrar o modificar la base de datos.
-- Conserva la procedencia de la evidencia y documenta las decisiones del investigador.
-- Limita la recolección a información pública y a usos legales y autorizados.
-- Antes de producción, revisa la autenticación, la gestión de sesiones, la limitación de intentos, la configuración de red, los secretos, los permisos y la política de retención de datos.
-
-## Próximas líneas de trabajo
-
-Entre las áreas pendientes se encuentran ampliar y evaluar las fuentes de datos, mejorar la edición persistente del grafo, facilitar la revisión de evidencias y correlaciones, completar las pruebas de autorización y de interfaz, reforzar la instalación en distintos sistemas y validar formalmente el método y el comportamiento de la plataforma.
-
-Estas líneas describen trabajo futuro, no funcionalidades que deban considerarse ya implementadas.
-
-## Licencia
-
-Consulta el repositorio para conocer el estado de la licencia. Este README no concede por sí mismo derechos de redistribución o uso adicionales.
+PAPIRO sigue en desarrollo: no incorpora IA/ML y no está listo para producción. Usa solo datos públicos y de forma legal. Revisa la configuración de seguridad antes de exponer la aplicación a otras redes.
