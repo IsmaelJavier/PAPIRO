@@ -29,8 +29,8 @@ Este es el objetivo de evolución, no el nivel de automatización que ofrece la 
 Requisitos: Git, Docker y Docker Compose.
 
 ```bash
-git clone https://github.com/Starv1ng/Kami-no-Eye.git
-cd Kami-no-Eye
+git clone https://github.com/Starv1ng/PAPIRO.git
+cd PAPIRO
 cp .env.example .env
 ```
 
