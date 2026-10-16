@@ -305,3 +305,47 @@ La rama `feature/collaboration-pull-request-flow` añade un flujo de propuesta t
 5. El hilo de comentarios se consulta por `share_id`, por lo que tanto el propietario original como el colaborador pueden ver los comentarios permitidos por su rol.
 
 Antes de desplegar esta rama, aplicar la migración aditiva `migrations/008_investigation_share_review.sql` sobre la base de datos existente. Esta migración solo agrega dos columnas a `investigation_shares`; no elimina investigaciones, copias ni comentarios.
+
+
+## Ideas e implementaciones recuperadas de ramas históricas
+
+Esta sección conserva el contexto útil de ramas distintas de `main`. No implica que su código esté integrado ni validado. Antes de reutilizar una idea, revisar la implementación actual de `main` y adaptar solo el cambio necesario. No restaurar ramas completas por encima de `main`.
+
+### Pendiente de evaluar: separar los recursos de la interfaz
+
+**Procedencia:** `refactor/separate-ui-assets` (PR #8).
+
+- Extraer el CSS y JavaScript incrustados de `index.html`, `workspace.html` y `graph.html` a archivos independientes: `index.css/js`, `workspace.css/js` y `graph.css/js`.
+- Servirlos bajo `/ui/assets/` y cargar los scripts con `defer`.
+- Añadir pruebas para comprobar que las páginas enlazan los recursos externos y que estos se sirven correctamente.
+- Mantener el comportamiento actual: en particular, abrir el espacio de trabajo no debe iniciar recolecciones automáticamente; la búsqueda debe seguir siendo una acción explícita del investigador.
+- Antes de integrar, revisar las diferencias contra `main`, ejecutar las pruebas de UI y comprobar acceso, registro, dashboard, grafo, edición, colaboración y autorización. La rama no debe considerarse validada solo porque las comprobaciones estáticas pasen.
+
+### Ideas de interfaz PAPIRO para reutilizar selectivamente
+
+**Procedencia:** `ui/papiro-redesign`, `feature/papiro-scroll-zoom-layout` y `fix/papiro-scroll-zoom-layout`.
+
+- Mantener tokens visuales semánticos compartidos para colores, tipografía, bordes, superficies y estados, evitando valores visuales divergentes entre páginas.
+- Mejorar el comportamiento del grafo: desplazamiento independiente de paneles, controles de zoom visibles y usables, diseño adaptable a pantallas estrechas y etiquetas legibles.
+- Mantener la inspección de una entidad separada de la selección explícita de extremos para crear una relación; abrir un perfil no debe seleccionar nodos de relación implícitamente.
+- Revisar navegación móvil accesible, estados `aria-expanded`, foco, contraste y respeto a `prefers-reduced-motion`.
+- Corregir y probar de forma aislada los selectores de registro/administración y la inicialización de colores de Cytoscape.
+
+La rama de rediseño diverge históricamente de `main`; estos puntos son una lista de ideas y correcciones a contrastar, no una instrucción para reemplazar los archivos actuales por los de aquella rama.
+
+### Funcionalidades cuya historia ya está incorporada en `main`
+
+Las siguientes ramas no muestran commits exclusivos respecto a `main` en la comparación consultada; sus nombres se conservan aquí como contexto, no como trabajo pendiente:
+
+- `feature/identity-authorization`: autenticación, roles, autorización por recurso y separación de acceso entre investigador, entidad institucional y administrador.
+- `feature/entity-onboarding-membership`: alta y verificación administrativa de entidades, gestión de membresías y selección de organización para investigaciones.
+- `feature/collaboration-pull-request-flow`: revisión explícita de propuestas de colaboración, diferencias antes/después, aprobación ligada a una versión concreta, fusión de tres vías y tratamiento explícito de conflictos concurrentes.
+- `fix/refresh-session-after-snapshot-restore`: consistencia del estado ORM después de restaurar instantáneas y comprobaciones de persistencia.
+- `ui/hide-investigation-sharing`: cambios históricos para ocultar controles de colaboración en la interfaz.
+- `archive/main-before-canonical-2026-10-12`: referencia histórica de la reorganización de la página de acceso y el dashboard. No usarla como base de desarrollo.
+
+Antes de reimplementar cualquiera de estas capacidades, comprobar primero su estado y sus pruebas en `main`; no duplicar una funcionalidad ya existente.
+
+### Criterio de mantenimiento de ramas
+
+`main` es la referencia de desarrollo. Las ramas históricas no deben usarse como base de despliegue. Antes de eliminar una rama, verificar que su trabajo exclusivo esté documentado aquí o integrado en `main`, revisar si tiene un pull request abierto y conservar el SHA del último commit cuando pueda ser útil para recuperar una implementación.
