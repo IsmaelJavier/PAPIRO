@@ -464,6 +464,12 @@ function toggleEntitySelection(id){
   if(selectedEntityIds.has(id)) selectedEntityIds.delete(id); else selectedEntityIds.add(id);
   if(selectedEntityIds.size>2){ const arr=[...selectedEntityIds]; selectedEntityIds=new Set(arr.slice(-2)); }
   renderEntities(); syncGraphSelection();
+  const selectionButton=document.querySelector('#details [data-entity-selection-button]');
+  if(selectionButton&&selectionButton.dataset.entitySelectionButton===id){
+    const selected=selectedEntityIds.has(id);
+    selectionButton.textContent=selected?'Remove from relationship selection':'Select for relationship';
+    selectionButton.setAttribute('aria-pressed',String(selected));
+  }
   if(selectedEntityIds.size===2) openRelationshipModal();
 }
 function syncGraphSelection(){
@@ -492,7 +498,7 @@ async function showEntity(id){
   try{
     const p=await api(`/entities/${encodeURIComponent(id)}/profile`);
     setDetails(`<div class="detail-title">${esc(p.label)}</div><div class="detail-sub">Candidate profile · ${esc(p.entity_type)}</div>
-      <div class="detail-actions"><button class="btn primary small" onclick="toggleEntitySelection('${esc(id)}')">Select for relationship</button><button class="btn small" onclick="openEntityEdit('${esc(id)}')">Edit profile</button><button class="btn small" onclick="hideNode('entity:${esc(id)}')">Hide from graph</button><button class="btn small" onclick="focusNode('entity:${esc(id)}')">Center in graph</button></div>
+      <div class="detail-actions"><button class="btn primary small" type="button" data-entity-selection-button="${esc(id)}" aria-pressed="${selectedEntityIds.has(id)}" onclick="toggleEntitySelection('${esc(id)}')">${selectedEntityIds.has(id)?'Remove from relationship selection':'Select for relationship'}</button><button class="btn small" onclick="openEntityEdit('${esc(id)}')">Edit profile</button><button class="btn small" onclick="hideNode('entity:${esc(id)}')">Hide from graph</button><button class="btn small" onclick="focusNode('entity:${esc(id)}')">Center in graph</button></div>
       ${kv('Description',p.description||'No description')}
       <h3 style="margin-top:14px">Associated evidence (${p.findings.length})</h3>
       ${p.findings.map(f=>`<div class="finding" style="margin-bottom:7px"><div class="finding-main"><div class="finding-title">${esc(f.value)}</div><div class="finding-meta">${esc(f.source)} · ${esc(f.finding_type)}</div></div></div>`).join('')||'<div class="empty">No evidence.</div>'}
