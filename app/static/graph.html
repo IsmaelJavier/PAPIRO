@@ -488,10 +488,9 @@ async function assessFinding(id, field, value){
   catch(e){ alert(`Could not update the finding: ${e.message}`); }
 }
 
-async function showEntity(id, preserveSelection=false){
+async function showEntity(id){
   try{
     const p=await api(`/entities/${encodeURIComponent(id)}/profile`);
-    if(!preserveSelection){ selectedEntityIds=new Set([id]); renderEntities(); syncGraphSelection(); }
     setDetails(`<div class="detail-title">${esc(p.label)}</div><div class="detail-sub">Candidate profile · ${esc(p.entity_type)}</div>
       <div class="detail-actions"><button class="btn primary small" onclick="toggleEntitySelection('${esc(id)}')">Select for relationship</button><button class="btn small" onclick="openEntityEdit('${esc(id)}')">Edit profile</button><button class="btn small" onclick="hideNode('entity:${esc(id)}')">Hide from graph</button><button class="btn small" onclick="focusNode('entity:${esc(id)}')">Center in graph</button></div>
       ${kv('Description',p.description||'No description')}
